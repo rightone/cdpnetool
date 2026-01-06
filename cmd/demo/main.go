@@ -17,7 +17,7 @@ import (
 func main() {
 	devtools := os.Getenv("DEVTOOLS_URL")
 
-	ilog.Set(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	var err error
 	var br *browser.Browser
@@ -30,7 +30,7 @@ func main() {
 		devtools = br.DevToolsURL
 	}
 
-	svc := api.NewService()
+	svc := api.NewServiceWithLogger(ilog.New(l))
 	cfg := model.SessionConfig{
 		DevToolsURL:       devtools,
 		Concurrency:       4,

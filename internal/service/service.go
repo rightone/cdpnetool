@@ -12,6 +12,7 @@ import (
 type svc struct {
 	mu       sync.Mutex
 	sessions map[model.SessionID]*session
+	log      ilog.Logger
 }
 
 type session struct {
@@ -24,8 +25,10 @@ type session struct {
 }
 
 // New 创建并返回服务层实例
-func New() *svc {
-	return &svc{sessions: make(map[model.SessionID]*session)}
+func New() *svc { return NewWithLogger(ilog.New(ilog.L())) }
+
+func NewWithLogger(l ilog.Logger) *svc {
+	return &svc{sessions: make(map[model.SessionID]*session), log: l}
 }
 
 // StartSession 创建新会话并初始化管理器
@@ -39,11 +42,13 @@ func (s *svc) StartSession(cfg model.SessionConfig) (model.SessionID, error) {
 		events:  make(chan model.Event, 128),
 		pending: make(chan any, cfg.PendingCapacity),
 	}
-	ses.mgr = cdp.New(cfg.DevToolsURL, ses.events, ses.pending)
+	ses.mgr = cdp.New(cfg.DevToolsURL, ses.events, ses.pending, s.log)
 	ses.mgr.SetConcurrency(cfg.Concurrency)
 	ses.mgr.SetRuntime(cfg.BodySizeThreshold, cfg.ProcessTimeoutMS)
 	s.sessions[id] = ses
-	ilog.L().Info("start_session", "session", string(id), "devtools", cfg.DevToolsURL, "concurrency", cfg.Concurrency, "pending", cfg.PendingCapacity)
+	if s.log != nil {
+		s.log.Info("start_session", "session", string(id), "devtools", cfg.DevToolsURL, "concurrency", cfg.Concurrency, "pending", cfg.PendingCapacity)
+	}
 	return id, nil
 }
 
@@ -63,7 +68,9 @@ func (s *svc) StopSession(id model.SessionID) error {
 	if ses.mgr != nil {
 		ses.mgr.Detach()
 	}
-	ilog.L().Info("stop_session", "session", string(id))
+	if s.log != nil {
+		s.log.Info("stop_session", "session", string(id))
+	}
 	return nil
 }
 
@@ -76,13 +83,19 @@ func (s *svc) AttachTarget(id model.SessionID, target model.TargetID) error {
 		return errx.New(errx.CodeSessionNotFound, "session not found")
 	}
 	if ses.mgr == nil {
-		ses.mgr = cdp.New(ses.cfg.DevToolsURL, ses.events, ses.pending)
+		ses.mgr = cdp.New(ses.cfg.DevToolsURL, ses.events, ses.pending, s.log)
 		ses.mgr.SetConcurrency(ses.cfg.Concurrency)
 		ses.mgr.SetRuntime(ses.cfg.BodySizeThreshold, ses.cfg.ProcessTimeoutMS)
 	}
 	err := ses.mgr.AttachTarget(target)
 	if err == nil {
-		ilog.L().Info("attach_target", "session", string(id), "target", string(target))
+		if s.log != nil {
+			s.log.Info("attach_target", "session", string(id), "target", string(target))
+		}
+	} else {
+		if s.log != nil {
+			s.log.Error("attach_target_error", "session", string(id), "error", err)
+		}
 	}
 	return err
 }
@@ -114,7 +127,13 @@ func (s *svc) EnableInterception(id model.SessionID) error {
 	}
 	err := ses.mgr.Enable()
 	if err == nil {
-		ilog.L().Info("enable_interception", "session", string(id))
+		if s.log != nil {
+			s.log.Info("enable_interception", "session", string(id))
+		}
+	} else {
+		if s.log != nil {
+			s.log.Error("enable_interception_error", "session", string(id), "error", err)
+		}
 	}
 	return err
 }
@@ -132,7 +151,13 @@ func (s *svc) DisableInterception(id model.SessionID) error {
 	}
 	err := ses.mgr.Disable()
 	if err == nil {
-		ilog.L().Info("disable_interception", "session", string(id))
+		if s.log != nil {
+			s.log.Info("disable_interception", "session", string(id))
+		}
+	} else {
+		if s.log != nil {
+			s.log.Error("disable_interception_error", "session", string(id), "error", err)
+		}
 	}
 	return err
 }
@@ -146,7 +171,9 @@ func (s *svc) LoadRules(id model.SessionID, rs model.RuleSet) error {
 		return errx.New(errx.CodeSessionNotFound, "session not found")
 	}
 	ses.rules = rs
-	ilog.L().Info("load_rules", "session", string(id), "count", len(rs.Rules), "version", rs.Version)
+	if s.log != nil {
+		s.log.Info("load_rules", "session", string(id), "count", len(rs.Rules), "version", rs.Version)
+	}
 	if ses.mgr != nil {
 		ses.mgr.UpdateRules(rs)
 	}

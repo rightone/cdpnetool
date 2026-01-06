@@ -1,6 +1,7 @@
 package api
 
 import (
+	ilog "cdpnetool/internal/log"
 	"cdpnetool/internal/service"
 	"cdpnetool/pkg/model"
 )
@@ -26,5 +27,9 @@ type Service interface {
 
 // NewService 创建并返回服务接口实现
 func NewService() Service {
-    return service.New()
+	return service.New()
+}
+
+func NewServiceWithLogger(l ilog.Logger) Service {
+	return service.NewWithLogger(l)
 }

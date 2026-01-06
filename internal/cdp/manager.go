@@ -36,21 +36,28 @@ type Manager struct {
 	workers           int
 	bodySizeThreshold int64
 	processTimeoutMS  int
+	log               ilog.Logger
 }
 
 // New 创建并返回一个管理器，用于管理CDP连接与拦截流程
-func New(devtoolsURL string, events chan model.Event, pending chan any) *Manager {
-	return &Manager{devtoolsURL: devtoolsURL, events: events, pending: pending, approvals: make(map[string]chan model.Rewrite)}
+func New(devtoolsURL string, events chan model.Event, pending chan any, l ilog.Logger) *Manager {
+	return &Manager{devtoolsURL: devtoolsURL, events: events, pending: pending, approvals: make(map[string]chan model.Rewrite), log: l}
 }
 
 // AttachTarget 附着到指定浏览器目标并建立CDP会话
 func (m *Manager) AttachTarget(target model.TargetID) error {
+	if m.log != nil {
+		m.log.Info("attach_target_begin", "devtools", m.devtoolsURL, "target", string(target))
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.ctx = ctx
 	m.cancel = cancel
 	dt := devtool.New(m.devtoolsURL)
 	targets, err := dt.List(ctx)
 	if err != nil {
+		if m.log != nil {
+			m.log.Error("attach_target_list_error", "error", err)
+		}
 		return err
 	}
 	var sel *devtool.Target
@@ -63,14 +70,23 @@ func (m *Manager) AttachTarget(target model.TargetID) error {
 		}
 	}
 	if sel == nil {
+		if m.log != nil {
+			m.log.Error("attach_target_none")
+		}
 		return fmt.Errorf("no target")
 	}
 	conn, err := rpcc.DialContext(ctx, sel.WebSocketDebuggerURL)
 	if err != nil {
+		if m.log != nil {
+			m.log.Error("attach_target_dial_error", "error", err)
+		}
 		return err
 	}
 	m.conn = conn
 	m.client = cdp.NewClient(conn)
+	if m.log != nil {
+		m.log.Info("attach_target_success")
+	}
 	return nil
 }
 
@@ -90,6 +106,9 @@ func (m *Manager) Enable() error {
 	if m.client == nil {
 		return fmt.Errorf("not attached")
 	}
+	if m.log != nil {
+		m.log.Info("enable_begin")
+	}
 	err := m.client.Network.Enable(m.ctx, nil)
 	if err != nil {
 		return err
@@ -104,6 +123,9 @@ func (m *Manager) Enable() error {
 		return err
 	}
 	go m.consume()
+	if m.log != nil {
+		m.log.Info("enable_done", "workers", m.workers)
+	}
 	return nil
 }
 
@@ -119,6 +141,9 @@ func (m *Manager) Disable() error {
 func (m *Manager) consume() {
 	rp, err := m.client.Fetch.RequestPaused(m.ctx)
 	if err != nil {
+		if m.log != nil {
+			m.log.Error("consume_subscribe_error", "error", err)
+		}
 		return
 	}
 	defer rp.Close()
@@ -126,9 +151,15 @@ func (m *Manager) consume() {
 	if m.workers > 0 {
 		sem = make(chan struct{}, m.workers)
 	}
+	if m.log != nil {
+		m.log.Info("consume_start")
+	}
 	for {
 		ev, err := rp.Recv()
 		if err != nil {
+			if m.log != nil {
+				m.log.Error("consume_recv_error", "error", err)
+			}
 			return
 		}
 		if sem != nil {
@@ -157,6 +188,9 @@ func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 	if ev.ResponseStatusCode != nil {
 		stg = "response"
 	}
+	if m.log != nil {
+		m.log.Debug("handle_start", "stage", stg, "url", ev.Request.URL, "method", ev.Request.Method)
+	}
 	res := m.decide(ev, stg)
 	if res == nil || res.Action == nil {
 		m.applyContinue(ctx, ev, stg)
@@ -167,6 +201,9 @@ func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 		if rand.Float64() < a.DropRate {
 			m.applyContinue(ctx, ev, stg)
 			m.events <- model.Event{Type: "degraded"}
+			if m.log != nil {
+				m.log.Warn("drop_rate_triggered", "stage", stg)
+			}
 			return
 		}
 	}
@@ -176,23 +213,38 @@ func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 	if time.Since(start) > time.Duration(to)*time.Millisecond {
 		m.applyContinue(ctx, ev, stg)
 		m.events <- model.Event{Type: "degraded"}
+		if m.log != nil {
+			m.log.Warn("process_timeout", "stage", stg)
+		}
 		return
 	}
 	if a.Pause != nil {
+		if m.log != nil {
+			m.log.Info("apply_pause", "stage", stg)
+		}
 		m.applyPause(ctx, ev, a.Pause, stg)
 		return
 	}
 	if a.Fail != nil {
+		if m.log != nil {
+			m.log.Info("apply_fail", "stage", stg)
+		}
 		m.applyFail(ctx, ev, a.Fail)
 		m.events <- model.Event{Type: "failed", Rule: res.RuleID}
 		return
 	}
 	if a.Respond != nil {
+		if m.log != nil {
+			m.log.Info("apply_respond", "stage", stg)
+		}
 		m.applyRespond(ctx, ev, a.Respond, stg)
 		m.events <- model.Event{Type: "fulfilled", Rule: res.RuleID}
 		return
 	}
 	if a.Rewrite != nil {
+		if m.log != nil {
+			m.log.Info("apply_rewrite", "stage", stg)
+		}
 		m.applyRewrite(ctx, ev, a.Rewrite, stg)
 		m.events <- model.Event{Type: "mutated", Rule: res.RuleID}
 		return
@@ -363,10 +415,14 @@ func parseInt64(s string) (int64, error) {
 func (m *Manager) applyContinue(ctx context.Context, ev *fetch.RequestPausedReply, stage string) {
 	if stage == "response" {
 		m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
-		ilog.L().Debug("continue_response")
+		if m.log != nil {
+			m.log.Debug("continue_response")
+		}
 	} else {
 		m.client.Fetch.ContinueRequest(ctx, &fetch.ContinueRequestArgs{RequestID: ev.RequestID})
-		ilog.L().Debug("continue_request")
+		if m.log != nil {
+			m.log.Debug("continue_request")
+		}
 	}
 }
 
