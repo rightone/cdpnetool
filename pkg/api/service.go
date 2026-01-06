@@ -24,6 +24,7 @@ type Service interface {
 	Reject(itemID string) error
 }
 
+// NewService 创建并返回服务接口实现
 func NewService() Service {
-	return service.New()
+    return service.New()
 }

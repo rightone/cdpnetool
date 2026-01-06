@@ -23,10 +23,12 @@ type session struct {
 	mgr     *cdp.Manager
 }
 
+// New 创建并返回服务层实例
 func New() *svc {
 	return &svc{sessions: make(map[model.SessionID]*session)}
 }
 
+// StartSession 创建新会话并初始化管理器
 func (s *svc) StartSession(cfg model.SessionConfig) (model.SessionID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,6 +47,7 @@ func (s *svc) StartSession(cfg model.SessionConfig) (model.SessionID, error) {
 	return id, nil
 }
 
+// StopSession 停止并清理指定会话
 func (s *svc) StopSession(id model.SessionID) error {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -64,6 +67,7 @@ func (s *svc) StopSession(id model.SessionID) error {
 	return nil
 }
 
+// AttachTarget 为指定会话附着到浏览器目标
 func (s *svc) AttachTarget(id model.SessionID, target model.TargetID) error {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -83,6 +87,7 @@ func (s *svc) AttachTarget(id model.SessionID, target model.TargetID) error {
 	return err
 }
 
+// DetachTarget 为指定会话断开目标连接
 func (s *svc) DetachTarget(id model.SessionID, target model.TargetID) error {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -96,6 +101,7 @@ func (s *svc) DetachTarget(id model.SessionID, target model.TargetID) error {
 	return nil
 }
 
+// EnableInterception 启用会话的拦截功能
 func (s *svc) EnableInterception(id model.SessionID) error {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -113,6 +119,7 @@ func (s *svc) EnableInterception(id model.SessionID) error {
 	return err
 }
 
+// DisableInterception 停用会话的拦截功能
 func (s *svc) DisableInterception(id model.SessionID) error {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -130,6 +137,7 @@ func (s *svc) DisableInterception(id model.SessionID) error {
 	return err
 }
 
+// LoadRules 为会话加载规则集并应用到管理器
 func (s *svc) LoadRules(id model.SessionID, rs model.RuleSet) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -145,6 +153,7 @@ func (s *svc) LoadRules(id model.SessionID, rs model.RuleSet) error {
 	return nil
 }
 
+// GetRuleStats 返回会话内规则引擎的命中统计
 func (s *svc) GetRuleStats(id model.SessionID) (model.EngineStats, error) {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -158,6 +167,7 @@ func (s *svc) GetRuleStats(id model.SessionID) (model.EngineStats, error) {
 	return ses.mgr.GetStats(), nil
 }
 
+// SubscribeEvents 订阅会话事件流
 func (s *svc) SubscribeEvents(id model.SessionID) (<-chan model.Event, error) {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -168,6 +178,7 @@ func (s *svc) SubscribeEvents(id model.SessionID) (<-chan model.Event, error) {
 	return ses.events, nil
 }
 
+// SubscribePending 订阅会话的待审批队列
 func (s *svc) SubscribePending(id model.SessionID) (<-chan any, error) {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]
@@ -178,6 +189,7 @@ func (s *svc) SubscribePending(id model.SessionID) (<-chan any, error) {
 	return ses.pending, nil
 }
 
+// ApproveRequest 审批请求阶段并应用重写
 func (s *svc) ApproveRequest(itemID string, mutations model.Rewrite) error {
 	s.mu.Lock()
 	for _, ses := range s.sessions {
@@ -189,6 +201,7 @@ func (s *svc) ApproveRequest(itemID string, mutations model.Rewrite) error {
 	return nil
 }
 
+// ApproveResponse 审批响应阶段并应用重写
 func (s *svc) ApproveResponse(itemID string, mutations model.Rewrite) error {
 	s.mu.Lock()
 	for _, ses := range s.sessions {
@@ -200,14 +213,17 @@ func (s *svc) ApproveResponse(itemID string, mutations model.Rewrite) error {
 	return nil
 }
 
+// Reject 拒绝审批项（占位实现）
 func (s *svc) Reject(itemID string) error {
 	return nil
 }
 
+// generateID 生成会话ID
 func generateID() string {
 	return randomID()
 }
 
+// randomID 生成简易随机ID
 func randomID() string {
 	var alphabet = []byte("abcdefghijklmnopqrstuvwxyz0123456789")
 	b := make([]byte, 16)

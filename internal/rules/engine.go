@@ -19,8 +19,10 @@ type Engine struct {
 	byRule  map[model.RuleID]int64
 }
 
+// New 创建规则引擎并加载规则集
 func New(rs model.RuleSet) *Engine { return &Engine{rs: rs} }
 
+// Update 更新引擎内的规则集
 func (e *Engine) Update(rs model.RuleSet) { e.rs = rs }
 
 type Ctx struct {
@@ -39,6 +41,7 @@ type Result struct {
 	Action *model.Action
 }
 
+// Eval 评估一次拦截上下文并返回命中的规则与动作
 func (e *Engine) Eval(ctx Ctx) *Result {
 	e.mu.Lock()
 	e.total++
@@ -72,6 +75,7 @@ func (e *Engine) Eval(ctx Ctx) *Result {
 	return &Result{RuleID: &rid, Action: &chosen.Action}
 }
 
+// matchRule 按All/Any/None组合逻辑判断是否匹配
 func matchRule(ctx Ctx, m model.Match) bool {
 	ok := true
 	if len(m.AllOf) > 0 {
@@ -86,6 +90,7 @@ func matchRule(ctx Ctx, m model.Match) bool {
 	return ok
 }
 
+// allOf 所有条件需满足
 func allOf(ctx Ctx, cs []model.Condition) bool {
 	for i := range cs {
 		if !cond(ctx, cs[i]) {
@@ -95,6 +100,7 @@ func allOf(ctx Ctx, cs []model.Condition) bool {
 	return true
 }
 
+// anyOf 任一条件满足即可
 func anyOf(ctx Ctx, cs []model.Condition) bool {
 	for i := range cs {
 		if cond(ctx, cs[i]) {
@@ -104,8 +110,10 @@ func anyOf(ctx Ctx, cs []model.Condition) bool {
 	return false
 }
 
+// noneOf 所有条件均不应满足
 func noneOf(ctx Ctx, cs []model.Condition) bool { return !anyOf(ctx, cs) }
 
+// cond 评估单个条件是否命中
 func cond(ctx Ctx, c model.Condition) bool {
 	switch c.Type {
 	case "url":
@@ -332,6 +340,7 @@ func cond(ctx Ctx, c model.Condition) bool {
 	}
 }
 
+// parseInt64 将数字字符串解析为int64
 func parseInt64(s string) (int64, error) {
 	var n int64
 	for i := 0; i < len(s); i++ {
@@ -344,6 +353,7 @@ func parseInt64(s string) (int64, error) {
 	return n, nil
 }
 
+// jsonPointer 依据JSON Pointer从Body中读取值为字符串
 func jsonPointer(body, ptr string) (string, bool) {
 	var v any
 	if err := json.Unmarshal([]byte(body), &v); err != nil {
@@ -392,6 +402,7 @@ func jsonPointer(body, ptr string) (string, bool) {
 	}
 }
 
+// splitPtr 将JSON Pointer切分为令牌序列
 func splitPtr(p string) []string {
 	var out []string
 	i := 1
@@ -409,6 +420,7 @@ func splitPtr(p string) []string {
 	return out
 }
 
+// toIndex 将字符串转换为数组索引
 func toIndex(s string) (int, bool) {
 	n := 0
 	if len(s) == 0 {
@@ -424,6 +436,7 @@ func toIndex(s string) (int, bool) {
 	return n, true
 }
 
+// formatFloat 将浮点数以尽量紧凑的十进制字符串表示
 func formatFloat(f float64) string {
 	if float64(int64(f)) == f {
 		return strconv.FormatInt(int64(f), 10)
@@ -431,6 +444,7 @@ func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
+// Stats 返回规则引擎的命中统计信息
 func (e *Engine) Stats() model.EngineStats {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -441,6 +455,7 @@ func (e *Engine) Stats() model.EngineStats {
 	return model.EngineStats{Total: e.total, Matched: e.matched, ByRule: m}
 }
 
+// matchRegex 使用缓存的正则进行匹配
 func matchRegex(s, pattern string) bool {
 	re, err := regexCache.Get(pattern)
 	if err != nil {
@@ -449,6 +464,7 @@ func matchRegex(s, pattern string) bool {
 	return re.MatchString(s)
 }
 
+// glob 简易通配符匹配，仅支持前后缀*
 func glob(s, pattern string) bool {
 	if pattern == "*" {
 		return true

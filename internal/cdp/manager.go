@@ -38,10 +38,12 @@ type Manager struct {
 	processTimeoutMS  int
 }
 
+// New 创建并返回一个管理器，用于管理CDP连接与拦截流程
 func New(devtoolsURL string, events chan model.Event, pending chan any) *Manager {
 	return &Manager{devtoolsURL: devtoolsURL, events: events, pending: pending, approvals: make(map[string]chan model.Rewrite)}
 }
 
+// AttachTarget 附着到指定浏览器目标并建立CDP会话
 func (m *Manager) AttachTarget(target model.TargetID) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.ctx = ctx
@@ -72,6 +74,7 @@ func (m *Manager) AttachTarget(target model.TargetID) error {
 	return nil
 }
 
+// Detach 断开当前会话连接并释放资源
 func (m *Manager) Detach() error {
 	if m.cancel != nil {
 		m.cancel()
@@ -82,6 +85,7 @@ func (m *Manager) Detach() error {
 	return nil
 }
 
+// Enable 启用Fetch/Network拦截功能并开始消费事件
 func (m *Manager) Enable() error {
 	if m.client == nil {
 		return fmt.Errorf("not attached")
@@ -103,6 +107,7 @@ func (m *Manager) Enable() error {
 	return nil
 }
 
+// Disable 停止拦截功能但保留连接
 func (m *Manager) Disable() error {
 	if m.client == nil {
 		return fmt.Errorf("not attached")
@@ -110,6 +115,7 @@ func (m *Manager) Disable() error {
 	return m.client.Fetch.Disable(m.ctx)
 }
 
+// consume 持续接收拦截事件并按并发限制分发处理
 func (m *Manager) consume() {
 	rp, err := m.client.Fetch.RequestPaused(m.ctx)
 	if err != nil {
@@ -137,6 +143,7 @@ func (m *Manager) consume() {
 	}
 }
 
+// handle 处理一次拦截事件并根据规则执行相应动作
 func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 	to := m.processTimeoutMS
 	if to <= 0 {
@@ -193,6 +200,7 @@ func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 	m.applyContinue(ctx, ev, stg)
 }
 
+// decide 构造规则上下文并进行匹配决策
 func (m *Manager) decide(ev *fetch.RequestPausedReply, stage string) *rules.Result {
 	if m.engine == nil {
 		return nil
@@ -276,6 +284,7 @@ func (m *Manager) decide(ev *fetch.RequestPausedReply, stage string) *rules.Resu
 	return res
 }
 
+// parseCookie 解析Cookie头为键值对映射
 func parseCookie(s string) map[string]string {
 	out := make(map[string]string)
 	parts := strings.Split(s, ";")
@@ -288,6 +297,7 @@ func parseCookie(s string) map[string]string {
 	return out
 }
 
+// parseSetCookie 解析Set-Cookie的首个键值
 func parseSetCookie(s string) (string, string) {
 	// CookieName=CookieValue; Attr=...
 	p := strings.SplitN(s, ";", 2)
@@ -299,6 +309,7 @@ func parseSetCookie(s string) (string, string) {
 	return "", ""
 }
 
+// urlParse 解析并按补丁修改查询参数后返回URL
 func urlParse(raw string, qpatch map[string]*string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -316,6 +327,7 @@ func urlParse(raw string, qpatch map[string]*string) (*url.URL, error) {
 	return u, nil
 }
 
+// shouldGetBody 判断是否需要获取响应体以用于匹配或重写
 func shouldGetBody(ctype string, clen int64, thr int64) bool {
 	if thr <= 0 {
 		thr = 4 * 1024 * 1024
@@ -333,6 +345,7 @@ func shouldGetBody(ctype string, clen int64, thr int64) bool {
 	return false
 }
 
+// parseInt64 将数字字符串解析为int64
 func parseInt64(s string) (int64, error) {
 	var n int64
 	var mul int64 = 1
@@ -346,6 +359,7 @@ func parseInt64(s string) (int64, error) {
 	return n * mul, nil
 }
 
+// applyContinue 继续原请求或响应不做修改
 func (m *Manager) applyContinue(ctx context.Context, ev *fetch.RequestPausedReply, stage string) {
 	if stage == "response" {
 		m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
@@ -356,10 +370,12 @@ func (m *Manager) applyContinue(ctx context.Context, ev *fetch.RequestPausedRepl
 	}
 }
 
+// applyFail 使请求失败并返回错误原因
 func (m *Manager) applyFail(ctx context.Context, ev *fetch.RequestPausedReply, f *model.Fail) {
 	m.client.Fetch.FailRequest(ctx, &fetch.FailRequestArgs{RequestID: ev.RequestID, ErrorReason: network.ErrorReasonFailed})
 }
 
+// applyRespond 返回自定义响应（可只改头或完整替换）
 func (m *Manager) applyRespond(ctx context.Context, ev *fetch.RequestPausedReply, r *model.Respond, stage string) {
 	if stage == "response" && len(r.Body) == 0 {
 		// 仅修改响应码/头，继续响应
@@ -384,6 +400,7 @@ func (m *Manager) applyRespond(ctx context.Context, ev *fetch.RequestPausedReply
 	m.client.Fetch.FulfillRequest(ctx, args)
 }
 
+// applyRewrite 根据规则对请求或响应进行重写
 func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply, rw *model.Rewrite, stage string) {
 	var url, method *string
 	if rw.URL != nil {
@@ -598,6 +615,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 	m.client.Fetch.ContinueRequest(ctx, args)
 }
 
+// applyJSONPatch 对JSON文档应用Patch操作并返回结果
 func applyJSONPatch(doc string, ops []any) (string, bool) {
 	var v any
 	if doc == "" {
@@ -651,6 +669,7 @@ func applyJSONPatch(doc string, ops []any) (string, bool) {
 	return string(b), true
 }
 
+// setByPtr 依据JSON Pointer设置节点值
 func setByPtr(cur any, ptr string, val any, replace bool) any {
 	if ptr == "" || ptr[0] != '/' {
 		return cur
@@ -659,6 +678,7 @@ func setByPtr(cur any, ptr string, val any, replace bool) any {
 	return setRec(cur, tokens, val)
 }
 
+// setRec 递归设置节点值的内部实现
 func setRec(cur any, tokens []string, val any) any {
 	if len(tokens) == 0 {
 		return val
@@ -687,6 +707,7 @@ func setRec(cur any, tokens []string, val any) any {
 	}
 }
 
+// removeByPtr 依据JSON Pointer移除节点
 func removeByPtr(cur any, ptr string) any {
 	if ptr == "" || ptr[0] != '/' {
 		return cur
@@ -695,6 +716,7 @@ func removeByPtr(cur any, ptr string) any {
 	return removeRec(cur, tokens)
 }
 
+// getByPtr 依据JSON Pointer读取节点值
 func getByPtr(cur any, ptr string) (any, bool) {
 	if ptr == "" || ptr[0] != '/' {
 		return nil, false
@@ -722,8 +744,10 @@ func getByPtr(cur any, ptr string) (any, bool) {
 	return x, true
 }
 
+// deepEqual 深度比较两个值是否相等
 func deepEqual(a, b any) bool { return reflect.DeepEqual(a, b) }
 
+// removeRec 递归移除节点的内部实现
 func removeRec(cur any, tokens []string) any {
 	if len(tokens) == 0 {
 		return cur
@@ -757,6 +781,7 @@ func removeRec(cur any, tokens []string) any {
 	}
 }
 
+// splitPtr 将JSON Pointer切分为令牌序列
 func splitPtr(p string) []string {
 	var out []string
 	i := 1
@@ -774,6 +799,7 @@ func splitPtr(p string) []string {
 	return out
 }
 
+// toIndex 将字符串转换为数组索引
 func toIndex(s string) (int, bool) {
 	n := 0
 	if len(s) == 0 {
@@ -789,6 +815,7 @@ func toIndex(s string) (int, bool) {
 	return n, true
 }
 
+// toHeaderEntries 将头部映射转换为CDP头部条目
 func toHeaderEntries(h map[string]string) []fetch.HeaderEntry {
 	out := make([]fetch.HeaderEntry, 0, len(h))
 	for k, v := range h {
@@ -797,6 +824,7 @@ func toHeaderEntries(h map[string]string) []fetch.HeaderEntry {
 	return out
 }
 
+// applyPause 进入人工审批流程并按超时默认动作处理
 func (m *Manager) applyPause(ctx context.Context, ev *fetch.RequestPausedReply, p *model.Pause, stage string) {
 	id := string(ev.RequestID)
 	ch := make(chan model.Rewrite, 1)
@@ -840,8 +868,10 @@ func (m *Manager) applyPause(ctx context.Context, ev *fetch.RequestPausedReply, 
 	delete(m.approvals, id)
 }
 
+// SetRules 设置新的规则集并初始化引擎
 func (m *Manager) SetRules(rs model.RuleSet) { m.engine = rules.New(rs) }
 
+// UpdateRules 更新已有规则集到引擎
 func (m *Manager) UpdateRules(rs model.RuleSet) {
 	if m.engine == nil {
 		m.engine = rules.New(rs)
@@ -850,19 +880,23 @@ func (m *Manager) UpdateRules(rs model.RuleSet) {
 	}
 }
 
+// Approve 根据审批ID应用外部提供的重写变更
 func (m *Manager) Approve(itemID string, mutations model.Rewrite) {
 	if ch, ok := m.approvals[itemID]; ok {
 		ch <- mutations
 	}
 }
 
+// SetConcurrency 配置拦截处理的并发工作协程数
 func (m *Manager) SetConcurrency(n int) { m.workers = n }
 
+// SetRuntime 设置运行时阈值与处理超时时间
 func (m *Manager) SetRuntime(bodySizeThreshold int64, processTimeoutMS int) {
 	m.bodySizeThreshold = bodySizeThreshold
 	m.processTimeoutMS = processTimeoutMS
 }
 
+// GetStats 返回规则引擎的命中统计信息
 func (m *Manager) GetStats() model.EngineStats {
 	if m.engine == nil {
 		return model.EngineStats{ByRule: make(map[model.RuleID]int64)}

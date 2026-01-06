@@ -12,6 +12,7 @@ type rc struct {
 
 var regexCache = &rc{m: make(map[string]*regexp.Regexp)}
 
+// Get 返回缓存中的正则或编译后加入缓存
 func (r *rc) Get(p string) (*regexp.Regexp, error) {
 	r.mu.Lock()
 	re, ok := r.m[p]

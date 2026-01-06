@@ -2,6 +2,7 @@ package obs
 
 import "strings"
 
+// MaskValue 对敏感值进行掩码处理
 func MaskValue(v string) string {
 	if len(v) <= 8 {
 		return "***"
@@ -9,6 +10,7 @@ func MaskValue(v string) string {
 	return v[:4] + "***" + v[len(v)-4:]
 }
 
+// MaskHeaders 对敏感头部字段进行掩码并返回新映射
 func MaskHeaders(h map[string]string) map[string]string {
 	if h == nil {
 		return nil
