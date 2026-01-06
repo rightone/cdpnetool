@@ -2,14 +2,21 @@ package rules
 
 import (
 	"encoding/json"
+	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"cdpnetool/pkg/model"
 )
 
 type Engine struct {
-	rs model.RuleSet
+	rs      model.RuleSet
+	mu      sync.Mutex
+	total   int64
+	matched int64
+	byRule  map[model.RuleID]int64
 }
 
 func New(rs model.RuleSet) *Engine { return &Engine{rs: rs} }
@@ -33,6 +40,9 @@ type Result struct {
 }
 
 func (e *Engine) Eval(ctx Ctx) *Result {
+	e.mu.Lock()
+	e.total++
+	e.mu.Unlock()
 	if len(e.rs.Rules) == 0 {
 		return nil
 	}
@@ -51,6 +61,13 @@ func (e *Engine) Eval(ctx Ctx) *Result {
 	if chosen == nil {
 		return nil
 	}
+	e.mu.Lock()
+	e.matched++
+	if e.byRule == nil {
+		e.byRule = make(map[model.RuleID]int64)
+	}
+	e.byRule[chosen.ID] = e.byRule[chosen.ID] + 1
+	e.mu.Unlock()
 	rid := chosen.ID
 	return &Result{RuleID: &rid, Action: &chosen.Action}
 }
@@ -168,6 +185,129 @@ func cond(ctx Ctx, c model.Condition) bool {
 		default:
 			return true
 		}
+	case "mime":
+		s := strings.ToLower(ctx.ContentType)
+		p := strings.ToLower(c.Pattern)
+		switch c.Mode {
+		case "exact":
+			return s == p
+		case "prefix":
+			return strings.HasPrefix(s, p)
+		default:
+			return strings.HasPrefix(s, p)
+		}
+	case "size":
+		var n int64
+		if ctx.Body != "" {
+			n = int64(len(ctx.Body))
+		} else {
+			if v, ok := ctx.Headers["content-length"]; ok {
+				if x, err := parseInt64(v); err == nil {
+					n = x
+				} else {
+					return false
+				}
+			} else {
+				return false
+			}
+		}
+		switch c.Op {
+		case "lt":
+			x, err := parseInt64(c.Value)
+			if err != nil {
+				return false
+			}
+			return n < x
+		case "lte":
+			x, err := parseInt64(c.Value)
+			if err != nil {
+				return false
+			}
+			return n <= x
+		case "gt":
+			x, err := parseInt64(c.Value)
+			if err != nil {
+				return false
+			}
+			return n > x
+		case "gte":
+			x, err := parseInt64(c.Value)
+			if err != nil {
+				return false
+			}
+			return n >= x
+		case "equals":
+			x, err := parseInt64(c.Value)
+			if err != nil {
+				return false
+			}
+			return n == x
+		case "between":
+			parts := strings.SplitN(c.Value, ":", 2)
+			if len(parts) != 2 {
+				return false
+			}
+			a, err1 := parseInt64(strings.TrimSpace(parts[0]))
+			b, err2 := parseInt64(strings.TrimSpace(parts[1]))
+			if err1 != nil || err2 != nil {
+				return false
+			}
+			if a > b {
+				a, b = b, a
+			}
+			return n >= a && n <= b
+		default:
+			return true
+		}
+	case "probability":
+		p := 0.0
+		if c.Value != "" {
+			if f, err := strconv.ParseFloat(c.Value, 64); err == nil {
+				if f < 0 {
+					f = 0
+				}
+				if f > 1 {
+					f = 1
+				}
+				p = f
+			}
+		}
+		return rand.Float64() < p
+	case "time_window":
+		// Value 格式: "HH:MM-HH:MM"
+		parts := strings.SplitN(c.Value, "-", 2)
+		if len(parts) != 2 {
+			return false
+		}
+		s1 := strings.TrimSpace(parts[0])
+		s2 := strings.TrimSpace(parts[1])
+		toMin := func(s string) (int, bool) {
+			t := strings.SplitN(s, ":", 2)
+			if len(t) != 2 {
+				return 0, false
+			}
+			h, err1 := strconv.Atoi(t[0])
+			m, err2 := strconv.Atoi(t[1])
+			if err1 != nil || err2 != nil {
+				return 0, false
+			}
+			if h < 0 || h > 23 || m < 0 || m > 59 {
+				return 0, false
+			}
+			return h*60 + m, true
+		}
+		a, ok1 := toMin(s1)
+		b, ok2 := toMin(s2)
+		if !ok1 || !ok2 {
+			return false
+		}
+		now := time.Now()
+		cur := now.Hour()*60 + now.Minute()
+		if a <= b {
+			return cur >= a && cur <= b
+		}
+		// 跨午夜窗口
+		return cur >= a || cur <= b
 	case "json_pointer":
 		if ctx.Body == "" {
 			return false
@@ -190,6 +330,18 @@ func cond(ctx Ctx, c model.Condition) bool {
 	default:
 		return false
 	}
+}
+
+func parseInt64(s string) (int64, error) {
+	var n int64
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return 0, strconv.ErrSyntax
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n, nil
 }
 
 func jsonPointer(body, ptr string) (string, bool) {
@@ -277,6 +429,16 @@ func formatFloat(f float64) string {
 		return strconv.FormatInt(int64(f), 10)
 	}
 	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+func (e *Engine) Stats() model.EngineStats {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	m := make(map[model.RuleID]int64, len(e.byRule))
+	for k, v := range e.byRule {
+		m[k] = v
+	}
+	return model.EngineStats{Total: e.total, Matched: e.matched, ByRule: m}
 }
 
 func matchRegex(s, pattern string) bool {

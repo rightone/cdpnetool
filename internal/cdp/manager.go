@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -154,6 +156,13 @@ func (m *Manager) handle(ev *fetch.RequestPausedReply) {
 		return
 	}
 	a := res.Action
+	if a.DropRate > 0 {
+		if rand.Float64() < a.DropRate {
+			m.applyContinue(ctx, ev, stg)
+			m.events <- model.Event{Type: "degraded"}
+			return
+		}
+	}
 	if a.DelayMS > 0 {
 		time.Sleep(time.Duration(a.DelayMS) * time.Millisecond)
 	}
@@ -392,12 +401,107 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 		}
 	}
 	if stage == "response" {
-		// mutate response headers by patching existing headers then continue response
-		if rw.Headers != nil {
-			cur := make(map[string]string, len(ev.ResponseHeaders))
-			for i := range ev.ResponseHeaders {
-				cur[strings.ToLower(ev.ResponseHeaders[i].Name)] = ev.ResponseHeaders[i].Value
+		var needBody bool
+		if rw.Body != nil {
+			needBody = true
+		}
+		if !needBody {
+			if rw.Headers != nil {
+				cur := make(map[string]string, len(ev.ResponseHeaders))
+				for i := range ev.ResponseHeaders {
+					cur[strings.ToLower(ev.ResponseHeaders[i].Name)] = ev.ResponseHeaders[i].Value
+				}
+				for k, v := range rw.Headers {
+					lk := strings.ToLower(k)
+					if v == nil {
+						delete(cur, lk)
+					} else {
+						cur[lk] = *v
+					}
+				}
+				var out []fetch.HeaderEntry
+				for k, v := range cur {
+					out = append(out, fetch.HeaderEntry{Name: k, Value: v})
+				}
+				m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID, ResponseHeaders: out})
+				return
 			}
+			m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
+			return
+		}
+		var ctype string
+		var clen int64
+		for i := range ev.ResponseHeaders {
+			k := ev.ResponseHeaders[i].Name
+			v := ev.ResponseHeaders[i].Value
+			if strings.EqualFold(k, "content-type") {
+				ctype = v
+			}
+			if strings.EqualFold(k, "content-length") {
+				if n, err := parseInt64(v); err == nil {
+					clen = n
+				}
+			}
+		}
+		if !shouldGetBody(ctype, clen, m.bodySizeThreshold) {
+			m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
+			return
+		}
+		ctx2, cancel := context.WithTimeout(m.ctx, 500*time.Millisecond)
+		defer cancel()
+		rb, err := m.client.Fetch.GetResponseBody(ctx2, &fetch.GetResponseBodyArgs{RequestID: ev.RequestID})
+		if err != nil || rb == nil {
+			m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
+			return
+		}
+		var bodyText string
+		if rb.Base64Encoded {
+			if b, err := base64.StdEncoding.DecodeString(rb.Body); err == nil {
+				bodyText = string(b)
+			}
+		} else {
+			bodyText = rb.Body
+		}
+		var newBody []byte
+		switch rw.Body.Type {
+		case "base64":
+			if len(rw.Body.Ops) > 0 {
+				if s, ok := rw.Body.Ops[0].(string); ok {
+					if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+						newBody = b
+					}
+				}
+			}
+		case "text_regex":
+			if len(rw.Body.Ops) >= 2 {
+				p, pOk := rw.Body.Ops[0].(string)
+				r, rOk := rw.Body.Ops[1].(string)
+				if pOk && rOk {
+					re, err := regexp.Compile(p)
+					if err == nil {
+						newBody = []byte(re.ReplaceAllString(bodyText, r))
+					}
+				}
+			}
+		case "json_patch":
+			if out, ok := applyJSONPatch(bodyText, rw.Body.Ops); ok {
+				newBody = []byte(out)
+			}
+		}
+		if len(newBody) == 0 {
+			m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
+			return
+		}
+		code := 200
+		if ev.ResponseStatusCode != nil {
+			code = *ev.ResponseStatusCode
+		}
+		args := &fetch.FulfillRequestArgs{RequestID: ev.RequestID, ResponseCode: code}
+		cur := make(map[string]string)
+		for i := range ev.ResponseHeaders {
+			cur[strings.ToLower(ev.ResponseHeaders[i].Name)] = ev.ResponseHeaders[i].Value
+		}
+		if rw.Headers != nil {
 			for k, v := range rw.Headers {
 				lk := strings.ToLower(k)
 				if v == nil {
@@ -406,14 +510,10 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 					cur[lk] = *v
 				}
 			}
-			var out []fetch.HeaderEntry
-			for k, v := range cur {
-				out = append(out, fetch.HeaderEntry{Name: k, Value: v})
-			}
-			m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID, ResponseHeaders: out})
-			return
 		}
-		m.client.Fetch.ContinueResponse(ctx, &fetch.ContinueResponseArgs{RequestID: ev.RequestID})
+		args.ResponseHeaders = toHeaderEntries(cur)
+		args.Body = newBody
+		m.client.Fetch.FulfillRequest(ctx, args)
 		return
 	}
 	if rw.Cookies != nil {
@@ -515,11 +615,33 @@ func applyJSONPatch(doc string, ops []any) (string, bool) {
 		typ, _ := m["op"].(string)
 		path, _ := m["path"].(string)
 		val := m["value"]
+		from, _ := m["from"].(string)
 		switch typ {
 		case "add", "replace":
 			v = setByPtr(v, path, val, typ == "replace")
 		case "remove":
 			v = removeByPtr(v, path)
+		case "copy":
+			src, ok := getByPtr(v, from)
+			if !ok {
+				return "", false
+			}
+			v = setByPtr(v, path, src, true)
+		case "move":
+			src, ok := getByPtr(v, from)
+			if !ok {
+				return "", false
+			}
+			v = removeByPtr(v, from)
+			v = setByPtr(v, path, src, true)
+		case "test":
+			cur, ok := getByPtr(v, path)
+			if !ok {
+				return "", false
+			}
+			if !deepEqual(cur, val) {
+				return "", false
+			}
 		}
 	}
 	b, err := json.Marshal(v)
@@ -572,6 +694,35 @@ func removeByPtr(cur any, ptr string) any {
 	tokens := splitPtr(ptr)
 	return removeRec(cur, tokens)
 }
+
+func getByPtr(cur any, ptr string) (any, bool) {
+	if ptr == "" || ptr[0] != '/' {
+		return nil, false
+	}
+	tokens := splitPtr(ptr)
+	x := cur
+	for _, t := range tokens {
+		switch c := x.(type) {
+		case map[string]any:
+			v, ok := c[t]
+			if !ok {
+				return nil, false
+			}
+			x = v
+		case []any:
+			idx, ok := toIndex(t)
+			if !ok || idx < 0 || idx >= len(c) {
+				return nil, false
+			}
+			x = c[idx]
+		default:
+			return nil, false
+		}
+	}
+	return x, true
+}
+
+func deepEqual(a, b any) bool { return reflect.DeepEqual(a, b) }
 
 func removeRec(cur any, tokens []string) any {
 	if len(tokens) == 0 {
@@ -710,4 +861,11 @@ func (m *Manager) SetConcurrency(n int) { m.workers = n }
 func (m *Manager) SetRuntime(bodySizeThreshold int64, processTimeoutMS int) {
 	m.bodySizeThreshold = bodySizeThreshold
 	m.processTimeoutMS = processTimeoutMS
+}
+
+func (m *Manager) GetStats() model.EngineStats {
+	if m.engine == nil {
+		return model.EngineStats{ByRule: make(map[model.RuleID]int64)}
+	}
+	return m.engine.Stats()
 }

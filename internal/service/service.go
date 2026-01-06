@@ -146,7 +146,16 @@ func (s *svc) LoadRules(id model.SessionID, rs model.RuleSet) error {
 }
 
 func (s *svc) GetRuleStats(id model.SessionID) (model.EngineStats, error) {
-	return model.EngineStats{ByRule: make(map[model.RuleID]int64)}, nil
+	s.mu.Lock()
+	ses, ok := s.sessions[id]
+	s.mu.Unlock()
+	if !ok {
+		return model.EngineStats{ByRule: make(map[model.RuleID]int64)}, nil
+	}
+	if ses.mgr == nil {
+		return model.EngineStats{ByRule: make(map[model.RuleID]int64)}, nil
+	}
+	return ses.mgr.GetStats(), nil
 }
 
 func (s *svc) SubscribeEvents(id model.SessionID) (<-chan model.Event, error) {
