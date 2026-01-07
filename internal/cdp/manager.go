@@ -40,17 +40,42 @@ type Manager struct {
 	bodySizeThreshold int64
 	processTimeoutMS  int
 	log               logger.Logger
+	attachMu          sync.Mutex
+	currentTarget     model.TargetID
+	fixedTarget       model.TargetID
+	workspaceStop     chan struct{}
+	knownTargets      map[model.TargetID]struct{}
 }
 
 // New 创建并返回一个管理器，用于管理CDP连接与拦截流程
 func New(devtoolsURL string, events chan model.Event, pending chan any, l logger.Logger) *Manager {
-	return &Manager{devtoolsURL: devtoolsURL, events: events, pending: pending, approvals: make(map[string]chan rulespec.Rewrite), log: l}
+	return &Manager{
+		devtoolsURL:  devtoolsURL,
+		events:       events,
+		pending:      pending,
+		approvals:    make(map[string]chan rulespec.Rewrite),
+		log:          l,
+		knownTargets: make(map[model.TargetID]struct{}),
+	}
 }
 
 // AttachTarget 附着到指定浏览器目标并建立CDP会话
 func (m *Manager) AttachTarget(target model.TargetID) error {
+	m.attachMu.Lock()
+	defer m.attachMu.Unlock()
 	if m.log != nil {
 		m.log.Info("attach_target_begin", "devtools", m.devtoolsURL, "target", string(target))
+	}
+	if target != "" {
+		m.fixedTarget = target
+	} else {
+		m.fixedTarget = ""
+	}
+	if m.cancel != nil {
+		m.cancel()
+	}
+	if m.conn != nil {
+		_ = m.conn.Close()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.ctx = ctx
@@ -64,12 +89,27 @@ func (m *Manager) AttachTarget(target model.TargetID) error {
 		return err
 	}
 	var sel *devtool.Target
-	for i := range targets {
-		if string(targets[i].ID) == string(target) || target == "" {
-			sel = targets[i]
-			if target == "" {
+	if target != "" {
+		for i := range targets {
+			if string(targets[i].ID) == string(target) {
+				sel = targets[i]
 				break
 			}
+		}
+	} else {
+		for i := len(targets) - 1; i >= 0; i-- {
+			if targets[i].Type == "page" {
+				if targets[i].URL != "" && !strings.HasPrefix(strings.ToLower(targets[i].URL), "chrome://") {
+					sel = targets[i]
+					break
+				}
+				if sel == nil {
+					sel = targets[i]
+				}
+			}
+		}
+		if sel == nil && len(targets) > 0 {
+			sel = targets[0]
 		}
 	}
 	if sel == nil {
@@ -87,17 +127,26 @@ func (m *Manager) AttachTarget(target model.TargetID) error {
 	}
 	m.conn = conn
 	m.client = cdp.NewClient(conn)
+	m.currentTarget = model.TargetID(sel.ID)
 	if m.log != nil {
 		m.log.Info("attach_target_success")
+	}
+	if target == "" {
+		m.startWorkspaceWatcher()
+	} else {
+		m.stopWorkspaceWatcher()
 	}
 	return nil
 }
 
 // Detach 断开当前会话连接并释放资源
 func (m *Manager) Detach() error {
+	m.attachMu.Lock()
+	defer m.attachMu.Unlock()
 	if m.cancel != nil {
 		m.cancel()
 	}
+	m.stopWorkspaceWatcher()
 	if m.conn != nil {
 		return m.conn.Close()
 	}
@@ -147,6 +196,7 @@ func (m *Manager) consume() {
 		if m.log != nil {
 			m.log.Error("consume_subscribe_error", "error", err)
 		}
+		m.handleStreamError(err)
 		return
 	}
 	defer rp.Close()
@@ -163,6 +213,7 @@ func (m *Manager) consume() {
 			if m.log != nil {
 				m.log.Error("consume_recv_error", "error", err)
 			}
+			m.handleStreamError(err)
 			return
 		}
 		if sem != nil {
@@ -175,6 +226,125 @@ func (m *Manager) consume() {
 			go m.handle(ev)
 		}
 	}
+}
+
+func (m *Manager) handleStreamError(err error) {
+	if m.ctx == nil {
+		return
+	}
+	if m.ctx.Err() != nil {
+		return
+	}
+	if m.log != nil {
+		m.log.Warn("stream_error_reconnect", "error", err)
+	}
+	if m.fixedTarget == "" {
+		return
+	}
+	if err := m.AttachTarget(m.fixedTarget); err != nil {
+		if m.log != nil {
+			m.log.Error("reconnect_attach_error", "error", err)
+		}
+		return
+	}
+	if err := m.Enable(); err != nil {
+		if m.log != nil {
+			m.log.Error("reconnect_enable_error", "error", err)
+		}
+	}
+}
+
+func (m *Manager) startWorkspaceWatcher() {
+	if m.workspaceStop != nil {
+		return
+	}
+	ch := make(chan struct{})
+	m.workspaceStop = ch
+	go m.workspaceLoop(ch)
+}
+
+func (m *Manager) stopWorkspaceWatcher() {
+	if m.workspaceStop != nil {
+		close(m.workspaceStop)
+		m.workspaceStop = nil
+	}
+}
+
+func (m *Manager) workspaceLoop(stop <-chan struct{}) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			m.checkWorkspace()
+		}
+	}
+}
+
+func (m *Manager) checkWorkspace() {
+	if m.devtoolsURL == "" {
+		return
+	}
+	if m.fixedTarget != "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	dt := devtool.New(m.devtoolsURL)
+	targets, err := dt.List(ctx)
+	if err != nil {
+		if m.log != nil {
+			m.log.Debug("workspace_list_error", "error", err)
+		}
+		return
+	}
+	var candidate model.TargetID
+	for i := len(targets) - 1; i >= 0; i-- {
+		if targets[i].Type != "page" {
+			continue
+		}
+		id := model.TargetID(targets[i].ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := m.knownTargets[id]; !ok {
+			candidate = id
+			break
+		}
+	}
+	for i := range targets {
+		if targets[i].Type != "page" {
+			continue
+		}
+		id := model.TargetID(targets[i].ID)
+		if id == "" {
+			continue
+		}
+		m.knownTargets[id] = struct{}{}
+	}
+	if candidate == "" {
+		return
+	}
+	if m.currentTarget != "" && string(m.currentTarget) == string(candidate) {
+		return
+	}
+	if err := m.attachAndEnable(candidate); err != nil {
+		if m.log != nil {
+			m.log.Error("workspace_switch_error", "error", err)
+		}
+	}
+}
+
+func (m *Manager) attachAndEnable(target model.TargetID) error {
+	if err := m.AttachTarget(target); err != nil {
+		return err
+	}
+	if err := m.Enable(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // handle 处理一次拦截事件并根据规则执行相应动作
