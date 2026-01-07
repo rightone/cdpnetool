@@ -34,6 +34,7 @@ const (
 	ConditionTypeProbability ConditionType = "probability"
 	ConditionTypeTimeWindow  ConditionType = "time_window"
 	ConditionTypeJSONPointer ConditionType = "json_pointer"
+	ConditionTypeStage       ConditionType = "stage"
 )
 
 const (

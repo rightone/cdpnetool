@@ -64,6 +64,7 @@ func main() {
 				Mode:     rulespec.RuleModeShortCircuit,
 				Match: rulespec.Match{
 					AllOf: []rulespec.Condition{
+						{Type: rulespec.ConditionTypeStage, Value: "response"},
 						{Type: rulespec.ConditionTypeMIME, Mode: rulespec.ConditionModePrefix, Pattern: "application/json"},
 					},
 				},

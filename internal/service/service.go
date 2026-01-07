@@ -8,6 +8,8 @@ import (
 	logger "cdpnetool/internal/logger"
 	"cdpnetool/pkg/model"
 	"cdpnetool/pkg/rulespec"
+
+	"github.com/google/uuid"
 )
 
 type svc struct {
@@ -36,7 +38,7 @@ func NewWithLogger(l logger.Logger) *svc {
 func (s *svc) StartSession(cfg model.SessionConfig) (model.SessionID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := model.SessionID(generateID())
+	id := model.SessionID(uuid.New().String())
 	ses := &session{
 		id:      id,
 		cfg:     cfg,
@@ -245,19 +247,4 @@ func (s *svc) ApproveResponse(itemID string, mutations rulespec.Rewrite) error {
 // Reject 拒绝审批项（占位实现）
 func (s *svc) Reject(itemID string) error {
 	return nil
-}
-
-// generateID 生成会话ID
-func generateID() string {
-	return randomID()
-}
-
-// randomID 生成简易随机ID
-func randomID() string {
-	var alphabet = []byte("abcdefghijklmnopqrstuvwxyz0123456789")
-	b := make([]byte, 16)
-	for i := range b {
-		b[i] = alphabet[i%len(alphabet)]
-	}
-	return string(b)
 }

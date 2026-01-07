@@ -251,6 +251,24 @@ type Condition struct {
 }
 ```
 
+### 14. 阶段条件（type = "stage"）
+
+- 用于显式限定规则只在请求阶段或响应阶段生效。
+- 字段：
+  - `value`: "request" 或 "response"（大小写不敏感）。
+
+示例：只在请求阶段命中规则：
+
+```json
+{ "type": "stage", "value": "request" }
+```
+
+示例：只在响应阶段命中规则：
+
+```json
+{ "type": "stage", "value": "response" }
+```
+
 ---
 
 ## 三、动作配置（Action）

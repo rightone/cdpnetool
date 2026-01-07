@@ -343,6 +343,16 @@ func cond(ctx Ctx, c rulespec.Condition) bool {
 		default:
 			return true
 		}
+	case rulespec.ConditionTypeStage:
+		if c.Value == "" {
+			return false
+		}
+		v := strings.ToLower(c.Value)
+		s := strings.ToLower(ctx.Stage)
+		if s == "" {
+			return false
+		}
+		return s == v
 	default:
 		return false
 	}
