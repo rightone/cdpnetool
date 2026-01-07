@@ -9,6 +9,8 @@ type ConditionOp string
 type PauseStage string
 type PauseDefaultActionType string
 
+type RuleMode string
+
 type JSONPatchOpType string
 
 const (
@@ -63,6 +65,11 @@ const (
 	PauseDefaultActionFail             PauseDefaultActionType = "fail"
 )
 
+const (
+	RuleModeShortCircuit RuleMode = "short_circuit"
+	RuleModeAggregate    RuleMode = "aggregate"
+)
+
 type RuleSet struct {
 	Version string `json:"version"`
 	Rules   []Rule `json:"rules"`
@@ -70,8 +77,9 @@ type RuleSet struct {
 
 type Rule struct {
 	ID       model.RuleID `json:"id"`
+	Name     string       `json:"name,omitempty"`
 	Priority int          `json:"priority"`
-	Mode     string       `json:"mode"`
+	Mode     RuleMode     `json:"mode"`
 	Match    Match        `json:"match"`
 	Action   Action       `json:"action"`
 }

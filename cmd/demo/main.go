@@ -12,6 +12,8 @@ import (
 	api "cdpnetool/pkg/api"
 	"cdpnetool/pkg/model"
 	"cdpnetool/pkg/rulespec"
+
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -56,9 +58,10 @@ func main() {
 		Version: "1.0",
 		Rules: []rulespec.Rule{
 			{
-				ID:       model.RuleID("demo_resp_patch"),
+				ID:       model.RuleID(uuid.New().String()),
+				Name:     "测试脚本",
 				Priority: 100,
-				Mode:     "short_circuit",
+				Mode:     rulespec.RuleModeShortCircuit,
 				Match: rulespec.Match{
 					AllOf: []rulespec.Condition{
 						{Type: rulespec.ConditionTypeMIME, Mode: rulespec.ConditionModePrefix, Pattern: "application/json"},

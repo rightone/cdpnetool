@@ -63,7 +63,7 @@ func (e *Engine) Eval(ctx Ctx) *Result {
 		if matchRule(ctx, r.Match) {
 			if chosen == nil || r.Priority > chosen.Priority {
 				chosen = r
-				if r.Mode == "short_circuit" {
+				if r.Mode == rulespec.RuleModeShortCircuit {
 					break
 				}
 			}
