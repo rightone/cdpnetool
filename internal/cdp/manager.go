@@ -539,28 +539,17 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 			bodyText = rb.Body
 		}
 		var newBody []byte
-		switch rw.Body.Type {
-		case rulespec.BodyPatchTypeBase64:
-			if len(rw.Body.Ops) > 0 {
-				if s, ok := rw.Body.Ops[0].(string); ok {
-					if b, err := base64.StdEncoding.DecodeString(s); err == nil {
-						newBody = b
-					}
-				}
+		if rw.Body.Base64 != nil {
+			if b, err := base64.StdEncoding.DecodeString(rw.Body.Base64.Value); err == nil {
+				newBody = b
 			}
-		case rulespec.BodyPatchTypeTextRegex:
-			if len(rw.Body.Ops) >= 2 {
-				p, pOk := rw.Body.Ops[0].(string)
-				r, rOk := rw.Body.Ops[1].(string)
-				if pOk && rOk {
-					re, err := regexp.Compile(p)
-					if err == nil {
-						newBody = []byte(re.ReplaceAllString(bodyText, r))
-					}
-				}
+		} else if rw.Body.TextRegex != nil {
+			re, err := regexp.Compile(rw.Body.TextRegex.Pattern)
+			if err == nil {
+				newBody = []byte(re.ReplaceAllString(bodyText, rw.Body.TextRegex.Replace))
 			}
-		case rulespec.BodyPatchTypeJSONPatch:
-			if out, ok := applyJSONPatch(bodyText, rw.Body.Ops); ok {
+		} else if len(rw.Body.JSONPatch) > 0 {
+			if out, ok := applyJSONPatch(bodyText, rw.Body.JSONPatch); ok {
 				newBody = []byte(out)
 			}
 		}
@@ -627,36 +616,25 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 	}
 	var post []byte
 	if rw.Body != nil {
-		switch rw.Body.Type {
-		case rulespec.BodyPatchTypeBase64:
-			if len(rw.Body.Ops) > 0 {
-				if s, ok := rw.Body.Ops[0].(string); ok {
-					b, err := base64.StdEncoding.DecodeString(s)
-					if err == nil {
-						post = b
-					}
-				}
+		if rw.Body.Base64 != nil {
+			b, err := base64.StdEncoding.DecodeString(rw.Body.Base64.Value)
+			if err == nil {
+				post = b
 			}
-		case rulespec.BodyPatchTypeTextRegex:
+		} else if rw.Body.TextRegex != nil {
 			if ev.Request.PostData != nil {
 				src := *ev.Request.PostData
-				if len(rw.Body.Ops) >= 2 {
-					p, pOk := rw.Body.Ops[0].(string)
-					r, rOk := rw.Body.Ops[1].(string)
-					if pOk && rOk {
-						re, err := regexp.Compile(p)
-						if err == nil {
-							post = []byte(re.ReplaceAllString(src, r))
-						}
-					}
+				re, err := regexp.Compile(rw.Body.TextRegex.Pattern)
+				if err == nil {
+					post = []byte(re.ReplaceAllString(src, rw.Body.TextRegex.Replace))
 				}
 			}
-		case rulespec.BodyPatchTypeJSONPatch:
+		} else if len(rw.Body.JSONPatch) > 0 {
 			var src string
 			if ev.Request.PostData != nil {
 				src = *ev.Request.PostData
 			}
-			if out, ok := applyJSONPatch(src, rw.Body.Ops); ok {
+			if out, ok := applyJSONPatch(src, rw.Body.JSONPatch); ok {
 				post = []byte(out)
 			}
 		}
@@ -675,7 +653,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 }
 
 // applyJSONPatch 对JSON文档应用Patch操作并返回结果
-func applyJSONPatch(doc string, ops []any) (string, bool) {
+func applyJSONPatch(doc string, ops []rulespec.JSONPatchOp) (string, bool) {
 	var v any
 	if doc == "" {
 		v = make(map[string]any)
@@ -685,20 +663,10 @@ func applyJSONPatch(doc string, ops []any) (string, bool) {
 		}
 	}
 	for _, op := range ops {
-		m, ok := op.(map[string]any)
-		if !ok {
-			continue
-		}
-		var typ string
-		switch v := m["op"].(type) {
-		case string:
-			typ = v
-		case rulespec.JSONPatchOpType:
-			typ = string(v)
-		}
-		path, _ := m["path"].(string)
-		val := m["value"]
-		from, _ := m["from"].(string)
+		typ := string(op.Op)
+		path := op.Path
+		val := op.Value
+		from := op.From
 		switch typ {
 		case string(rulespec.JSONPatchOpAdd), string(rulespec.JSONPatchOpReplace):
 			v = setByPtr(v, path, val, typ == string(rulespec.JSONPatchOpReplace))

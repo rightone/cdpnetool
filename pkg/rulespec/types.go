@@ -6,7 +6,6 @@ type ConditionType string
 type ConditionMode string
 type ConditionOp string
 
-type BodyPatchType string
 type PauseStage string
 type PauseDefaultActionType string
 
@@ -50,12 +49,6 @@ const (
 	ConditionOpGT       ConditionOp = "gt"
 	ConditionOpGTE      ConditionOp = "gte"
 	ConditionOpBetween  ConditionOp = "between"
-)
-
-const (
-	BodyPatchTypeJSONPatch BodyPatchType = "json_patch"
-	BodyPatchTypeTextRegex BodyPatchType = "text_regex"
-	BodyPatchTypeBase64    BodyPatchType = "base64"
 )
 
 const (
@@ -119,8 +112,25 @@ type Rewrite struct {
 }
 
 type BodyPatch struct {
-	Type BodyPatchType `json:"type"`
-	Ops  []any         `json:"ops"`
+	JSONPatch []JSONPatchOp   `json:"jsonPatch,omitempty"`
+	TextRegex *TextRegexPatch `json:"textRegex,omitempty"`
+	Base64    *Base64Patch    `json:"base64,omitempty"`
+}
+
+type JSONPatchOp struct {
+	Op    JSONPatchOpType `json:"op"`
+	Path  string          `json:"path"`
+	From  string          `json:"from,omitempty"`
+	Value any             `json:"value,omitempty"`
+}
+
+type TextRegexPatch struct {
+	Pattern string `json:"pattern"`
+	Replace string `json:"replace"`
+}
+
+type Base64Patch struct {
+	Value string `json:"value"`
 }
 
 type Respond struct {

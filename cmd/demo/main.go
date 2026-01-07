@@ -67,9 +67,12 @@ func main() {
 				Action: rulespec.Action{
 					Rewrite: &rulespec.Rewrite{
 						Body: &rulespec.BodyPatch{
-							Type: rulespec.BodyPatchTypeJSONPatch,
-							Ops: []any{
-								map[string]any{"op": rulespec.JSONPatchOpAdd, "path": "/_cdpnetool/demo", "value": true},
+							JSONPatch: []rulespec.JSONPatchOp{
+								{
+									Op:    rulespec.JSONPatchOpAdd,
+									Path:  "/_cdpnetool/demo",
+									Value: true,
+								},
 							},
 						},
 					},
