@@ -6,6 +6,10 @@ type ConditionType string
 type ConditionMode string
 type ConditionOp string
 
+type BodyPatchType string
+type PauseStage string
+type PauseDefaultActionType string
+
 const (
 	ConditionTypeURL         ConditionType = "url"
 	ConditionTypeMethod      ConditionType = "method"
@@ -35,6 +39,24 @@ const (
 	ConditionOpGT       ConditionOp = "gt"
 	ConditionOpGTE      ConditionOp = "gte"
 	ConditionOpBetween  ConditionOp = "between"
+)
+
+const (
+	BodyPatchTypeJSONPatch BodyPatchType = "json_patch"
+	BodyPatchTypeTextRegex BodyPatchType = "text_regex"
+	BodyPatchTypeBase64    BodyPatchType = "base64"
+)
+
+const (
+	PauseStageRequest  PauseStage = "request"
+	PauseStageResponse PauseStage = "response"
+)
+
+const (
+	PauseDefaultActionContinueOriginal PauseDefaultActionType = "continue_original"
+	PauseDefaultActionContinueMutated  PauseDefaultActionType = "continue_mutated"
+	PauseDefaultActionFulfill          PauseDefaultActionType = "fulfill"
+	PauseDefaultActionFail             PauseDefaultActionType = "fail"
 )
 
 type RuleSet struct {
@@ -86,8 +108,8 @@ type Rewrite struct {
 }
 
 type BodyPatch struct {
-	Type string `json:"type"`
-	Ops  []any  `json:"ops"`
+	Type BodyPatchType `json:"type"`
+	Ops  []any         `json:"ops"`
 }
 
 type Respond struct {
@@ -102,11 +124,11 @@ type Fail struct {
 }
 
 type Pause struct {
-	Stage         string `json:"stage"`
-	TimeoutMS     int    `json:"timeoutMS"`
+	Stage         PauseStage `json:"stage"`
+	TimeoutMS     int        `json:"timeoutMS"`
 	DefaultAction struct {
-		Type   string `json:"type"`
-		Status int    `json:"status"`
-		Reason string `json:"reason"`
+		Type   PauseDefaultActionType `json:"type"`
+		Status int                    `json:"status"`
+		Reason string                 `json:"reason"`
 	} `json:"defaultAction"`
 }

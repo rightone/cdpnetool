@@ -61,12 +61,12 @@ func main() {
 				Mode:     "short_circuit",
 				Match: rulespec.Match{
 					AllOf: []rulespec.Condition{
-						{Type: "mime", Mode: "prefix", Pattern: "application/json"},
+						{Type: rulespec.ConditionTypeMIME, Mode: rulespec.ConditionModePrefix, Pattern: "application/json"},
 					},
 				},
 				Action: rulespec.Action{
 					Rewrite: &rulespec.Rewrite{
-						Body: &rulespec.BodyPatch{Type: "json_patch", Ops: []any{
+						Body: &rulespec.BodyPatch{Type: rulespec.BodyPatchTypeJSONPatch, Ops: []any{
 							map[string]any{"op": "add", "path": "/_cdpnetool/demo", "value": true},
 						}},
 					},

@@ -540,7 +540,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 		}
 		var newBody []byte
 		switch rw.Body.Type {
-		case "base64":
+		case rulespec.BodyPatchTypeBase64:
 			if len(rw.Body.Ops) > 0 {
 				if s, ok := rw.Body.Ops[0].(string); ok {
 					if b, err := base64.StdEncoding.DecodeString(s); err == nil {
@@ -548,7 +548,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 					}
 				}
 			}
-		case "text_regex":
+		case rulespec.BodyPatchTypeTextRegex:
 			if len(rw.Body.Ops) >= 2 {
 				p, pOk := rw.Body.Ops[0].(string)
 				r, rOk := rw.Body.Ops[1].(string)
@@ -559,7 +559,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 					}
 				}
 			}
-		case "json_patch":
+		case rulespec.BodyPatchTypeJSONPatch:
 			if out, ok := applyJSONPatch(bodyText, rw.Body.Ops); ok {
 				newBody = []byte(out)
 			}
@@ -628,7 +628,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 	var post []byte
 	if rw.Body != nil {
 		switch rw.Body.Type {
-		case "base64":
+		case rulespec.BodyPatchTypeBase64:
 			if len(rw.Body.Ops) > 0 {
 				if s, ok := rw.Body.Ops[0].(string); ok {
 					b, err := base64.StdEncoding.DecodeString(s)
@@ -637,7 +637,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 					}
 				}
 			}
-		case "text_regex":
+		case rulespec.BodyPatchTypeTextRegex:
 			if ev.Request.PostData != nil {
 				src := *ev.Request.PostData
 				if len(rw.Body.Ops) >= 2 {
@@ -651,7 +651,7 @@ func (m *Manager) applyRewrite(ctx context.Context, ev *fetch.RequestPausedReply
 					}
 				}
 			}
-		case "json_patch":
+		case rulespec.BodyPatchTypeJSONPatch:
 			var src string
 			if ev.Request.PostData != nil {
 				src = *ev.Request.PostData
@@ -895,11 +895,11 @@ func (m *Manager) applyPause(ctx context.Context, ev *fetch.RequestPausedReply, 
 		case m.pending <- struct{ ID string }{ID: id}:
 		default:
 			switch p.DefaultAction.Type {
-			case "fulfill":
+			case rulespec.PauseDefaultActionFulfill:
 				m.applyRespond(ctx, ev, &rulespec.Respond{Status: p.DefaultAction.Status}, stage)
-			case "fail":
+			case rulespec.PauseDefaultActionFail:
 				m.applyFail(ctx, ev, &rulespec.Fail{Reason: p.DefaultAction.Reason})
-			case "continue_mutated":
+			case rulespec.PauseDefaultActionContinueMutated:
 				m.applyContinue(ctx, ev, stage)
 			default:
 				m.applyContinue(ctx, ev, stage)
@@ -921,11 +921,11 @@ func (m *Manager) applyPause(ctx context.Context, ev *fetch.RequestPausedReply, 
 		}
 	case <-t.C:
 		switch p.DefaultAction.Type {
-		case "fulfill":
+		case rulespec.PauseDefaultActionFulfill:
 			m.applyRespond(ctx, ev, &rulespec.Respond{Status: p.DefaultAction.Status}, stage)
-		case "fail":
+		case rulespec.PauseDefaultActionFail:
 			m.applyFail(ctx, ev, &rulespec.Fail{Reason: p.DefaultAction.Reason})
-		case "continue_mutated":
+		case rulespec.PauseDefaultActionContinueMutated:
 			m.applyContinue(ctx, ev, stage)
 		default:
 			m.applyContinue(ctx, ev, stage)
