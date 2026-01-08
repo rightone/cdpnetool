@@ -52,6 +52,15 @@ type Manager struct {
 	fixedTarget       model.TargetID
 	workspaceStop     chan struct{}
 	mode              workspaceMode
+	watchersMu        sync.Mutex
+	watchers          map[model.TargetID]*targetWatcher
+}
+
+type targetWatcher struct {
+	id     model.TargetID
+	conn   *rpcc.Conn
+	client *cdp.Client
+	cancel context.CancelFunc
 }
 
 // New 创建并返回一个管理器，用于管理CDP连接与拦截流程
@@ -66,6 +75,7 @@ func New(devtoolsURL string, events chan model.Event, pending chan any, l logger
 		approvals:   make(map[string]chan rulespec.Rewrite),
 		log:         l,
 		mode:        workspaceModeAutoFollow,
+		watchers:    make(map[model.TargetID]*targetWatcher),
 	}
 }
 
@@ -227,6 +237,7 @@ func (m *Manager) stopWorkspaceWatcher() {
 		close(m.workspaceStop)
 		m.workspaceStop = nil
 	}
+	m.stopAllWatchers()
 }
 
 func (m *Manager) workspaceLoop(stop <-chan struct{}) {
@@ -258,6 +269,7 @@ func (m *Manager) checkWorkspace() {
 		m.log.Debug("工作区轮询获取目标列表失败", "error", err)
 		return
 	}
+	m.refreshWatchers(ctx, targets)
 	sel := selectAutoTarget(targets)
 	if sel == nil {
 		return
@@ -1035,6 +1047,127 @@ func selectAutoTarget(targets []*devtool.Target) *devtool.Target {
 		return targets[0]
 	}
 	return sel
+}
+
+func (m *Manager) refreshWatchers(ctx context.Context, targets []*devtool.Target) {
+	ids := make(map[model.TargetID]*devtool.Target)
+	for i := range targets {
+		if targets[i] == nil {
+			continue
+		}
+		if targets[i].Type != "page" {
+			continue
+		}
+		if !isUserPageURL(targets[i].URL) {
+			continue
+		}
+		id := model.TargetID(targets[i].ID)
+		if id == "" {
+			continue
+		}
+		ids[id] = targets[i]
+	}
+	m.watchersMu.Lock()
+	for id, w := range m.watchers {
+		if _, ok := ids[id]; !ok {
+			w.cancel()
+			if w.conn != nil {
+				_ = w.conn.Close()
+			}
+			delete(m.watchers, id)
+		}
+	}
+	for id, t := range ids {
+		if _, ok := m.watchers[id]; ok {
+			continue
+		}
+		w, err := m.startWatcher(ctx, id, t.WebSocketDebuggerURL)
+		if err != nil {
+			m.log.Debug("创建目标可见性监听器失败", "target", string(id), "error", err)
+			continue
+		}
+		m.watchers[id] = w
+	}
+	m.watchersMu.Unlock()
+}
+
+func (m *Manager) startWatcher(ctx context.Context, id model.TargetID, wsURL string) (*targetWatcher, error) {
+	wctx, cancel := context.WithCancel(context.Background())
+	conn, err := rpcc.DialContext(wctx, wsURL)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	client := cdp.NewClient(conn)
+	if err := client.Page.Enable(wctx); err != nil {
+		cancel()
+		_ = conn.Close()
+		return nil, err
+	}
+	stream, err := client.Page.LifecycleEvent(wctx)
+	if err != nil {
+		cancel()
+		_ = conn.Close()
+		return nil, err
+	}
+	w := &targetWatcher{id: id, conn: conn, client: client, cancel: cancel}
+	go func() {
+		defer stream.Close()
+		for {
+			ev, err := stream.Recv()
+			if err != nil {
+				break
+			}
+			if ev == nil {
+				continue
+			}
+			name := ev.Name
+			if name == "visible" {
+				m.onTargetVisible(id)
+			}
+		}
+		m.removeWatcher(id)
+	}()
+	return w, nil
+}
+
+func (m *Manager) onTargetVisible(id model.TargetID) {
+	if id == "" {
+		return
+	}
+	if m.mode != workspaceModeAutoFollow {
+		return
+	}
+	if m.currentTarget != "" && m.currentTarget == id {
+		return
+	}
+	if err := m.attachAndEnable(id, true); err != nil {
+		m.log.Error("根据可见性切换浏览器目标失败", "target", string(id), "error", err)
+	}
+}
+
+func (m *Manager) removeWatcher(id model.TargetID) {
+	m.watchersMu.Lock()
+	defer m.watchersMu.Unlock()
+	if w, ok := m.watchers[id]; ok {
+		w.cancel()
+		if w.conn != nil {
+			_ = w.conn.Close()
+		}
+		delete(m.watchers, id)
+	}
+}
+
+func (m *Manager) stopAllWatchers() {
+	m.watchersMu.Lock()
+	defer m.watchersMu.Unlock()
+	for id, w := range m.watchers {
+		w.cancel()
+		if w.conn != nil {
+			_ = w.conn.Close()
+		}
+		delete(m.watchers, id)
+	}
 }
 
 func (m *Manager) ListTargets(ctx context.Context) ([]model.TargetInfo, error) {
