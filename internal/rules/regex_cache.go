@@ -10,6 +10,7 @@ type rc struct {
 	m  map[string]*regexp.Regexp
 }
 
+// regexCache 正则表达式缓存
 var regexCache = &rc{m: make(map[string]*regexp.Regexp)}
 
 // Get 返回缓存中的正则或编译后加入缓存

@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"log"
 
 	"cdpnetool/internal/gui"
 
@@ -29,7 +30,7 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.Startup,
 		OnShutdown:       app.Shutdown,
-		Bind: []interface{}{
+		Bind: []any{
 			app,
 		},
 		Windows: &windows.Options{
@@ -40,6 +41,6 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		log.Panic(err)
 	}
 }

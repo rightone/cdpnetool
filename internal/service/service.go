@@ -30,9 +30,7 @@ type session struct {
 }
 
 // New 创建并返回服务层实例
-func New() *svc { return NewWithLogger(logger.NewDefaultLogger(logger.LogLevelInfo, nil)) }
-
-func NewWithLogger(l logger.Logger) *svc {
+func New(l logger.Logger) *svc {
 	if l == nil {
 		l = logger.NewNoopLogger()
 	}
@@ -130,6 +128,7 @@ func (s *svc) DetachTarget(id model.SessionID, target model.TargetID) error {
 	return nil
 }
 
+// ListTargets 列出指定会话中的所有浏览器目标
 func (s *svc) ListTargets(id model.SessionID) ([]model.TargetInfo, error) {
 	s.mu.Lock()
 	ses, ok := s.sessions[id]

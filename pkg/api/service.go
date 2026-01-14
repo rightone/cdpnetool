@@ -1,7 +1,7 @@
 package api
 
 import (
-	logger "cdpnetool/internal/logger"
+	"cdpnetool/internal/logger"
 	"cdpnetool/internal/service"
 	"cdpnetool/pkg/model"
 	"cdpnetool/pkg/rulespec"
@@ -28,8 +28,6 @@ type Service interface {
 }
 
 // NewService 创建并返回服务接口实现
-func NewService() Service {
-	return service.New()
+func NewService(l logger.Logger) Service {
+	return service.New(l)
 }
-
-func NewServiceWithLogger(l logger.Logger) Service { return service.NewWithLogger(l) }
