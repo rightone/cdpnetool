@@ -12,11 +12,13 @@ import (
 )
 
 // RuleSetRepo 规则集仓库
-type RuleSetRepo struct{}
+type RuleSetRepo struct {
+	db *DB
+}
 
 // NewRuleSetRepo 创建规则集仓库实例
-func NewRuleSetRepo() *RuleSetRepo {
-	return &RuleSetRepo{}
+func NewRuleSetRepo(db *DB) *RuleSetRepo {
+	return &RuleSetRepo{db: db}
 }
 
 // Create 创建新规则集
@@ -35,7 +37,7 @@ func (r *RuleSetRepo) Create(name, version string, rules []rulespec.Rule) (*Rule
 		UpdatedAt: time.Now(),
 	}
 
-	if err := DB().Create(record).Error; err != nil {
+	if err := r.db.GormDB().Create(record).Error; err != nil {
 		return nil, err
 	}
 	return record, nil
@@ -48,7 +50,7 @@ func (r *RuleSetRepo) Update(id uint, name, version string, rules []rulespec.Rul
 		return fmt.Errorf("序列化规则失败: %w", err)
 	}
 
-	return DB().Model(&RuleSetRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
+	return r.db.GormDB().Model(&RuleSetRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"name":       name,
 		"version":    version,
 		"rules_json": string(rulesJSON),
@@ -58,13 +60,13 @@ func (r *RuleSetRepo) Update(id uint, name, version string, rules []rulespec.Rul
 
 // Delete 删除规则集
 func (r *RuleSetRepo) Delete(id uint) error {
-	return DB().Delete(&RuleSetRecord{}, id).Error
+	return r.db.GormDB().Delete(&RuleSetRecord{}, id).Error
 }
 
 // GetByID 根据 ID 获取规则集
 func (r *RuleSetRepo) GetByID(id uint) (*RuleSetRecord, error) {
 	var record RuleSetRecord
-	if err := DB().First(&record, id).Error; err != nil {
+	if err := r.db.GormDB().First(&record, id).Error; err != nil {
 		return nil, err
 	}
 	return &record, nil
@@ -73,7 +75,7 @@ func (r *RuleSetRepo) GetByID(id uint) (*RuleSetRecord, error) {
 // GetByName 根据名称获取规则集
 func (r *RuleSetRepo) GetByName(name string) (*RuleSetRecord, error) {
 	var record RuleSetRecord
-	if err := DB().Where("name = ?", name).First(&record).Error; err != nil {
+	if err := r.db.GormDB().Where("name = ?", name).First(&record).Error; err != nil {
 		return nil, err
 	}
 	return &record, nil
@@ -82,7 +84,7 @@ func (r *RuleSetRepo) GetByName(name string) (*RuleSetRecord, error) {
 // List 列出所有规则集
 func (r *RuleSetRepo) List() ([]RuleSetRecord, error) {
 	var records []RuleSetRecord
-	if err := DB().Order("updated_at DESC").Find(&records).Error; err != nil {
+	if err := r.db.GormDB().Order("updated_at DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	return records, nil
@@ -90,7 +92,7 @@ func (r *RuleSetRepo) List() ([]RuleSetRecord, error) {
 
 // SetActive 设置激活的规则集（只能有一个激活）
 func (r *RuleSetRepo) SetActive(id uint) error {
-	return DB().Transaction(func(tx *gorm.DB) error {
+	return r.db.GormDB().Transaction(func(tx *gorm.DB) error {
 		// 先取消所有激活
 		if err := tx.Model(&RuleSetRecord{}).Where("is_active = ?", true).Update("is_active", false).Error; err != nil {
 			return err
@@ -106,7 +108,7 @@ func (r *RuleSetRepo) SetActive(id uint) error {
 // GetActive 获取当前激活的规则集
 func (r *RuleSetRepo) GetActive() (*RuleSetRecord, error) {
 	var record RuleSetRecord
-	if err := DB().Where("is_active = ?", true).First(&record).Error; err != nil {
+	if err := r.db.GormDB().Where("is_active = ?", true).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -156,7 +158,7 @@ func (r *RuleSetRepo) SaveFromRuleSet(id uint, name string, rs *rulespec.RuleSet
 
 // Rename 重命名规则集
 func (r *RuleSetRepo) Rename(id uint, newName string) error {
-	return DB().Model(&RuleSetRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
+	return r.db.GormDB().Model(&RuleSetRecord{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"name":       newName,
 		"updated_at": time.Now(),
 	}).Error
@@ -178,7 +180,7 @@ func (r *RuleSetRepo) Duplicate(id uint, newName string) (*RuleSetRecord, error)
 		UpdatedAt: time.Now(),
 	}
 
-	if err := DB().Create(record).Error; err != nil {
+	if err := r.db.GormDB().Create(record).Error; err != nil {
 		return nil, err
 	}
 	return record, nil

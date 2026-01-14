@@ -28,6 +28,9 @@ type App struct {
 	// browser 已启动的浏览器进程实例
 	browser *browser.Browser
 
+	// 数据库连接
+	db *storage.DB
+
 	// 存储仓库
 	settingsRepo *storage.SettingsRepo
 	ruleSetRepo  *storage.RuleSetRepo
@@ -39,10 +42,8 @@ func NewApp() *App {
 	log := logger.NewDefaultLogger(logger.LogLevelInfo, nil)
 	log.Debug("创建 App 实例")
 	return &App{
-		log:          log,
-		service:      api.NewService(log),
-		settingsRepo: storage.NewSettingsRepo(),
-		ruleSetRepo:  storage.NewRuleSetRepo(),
+		log:     log,
+		service: api.NewService(log),
 	}
 }
 
@@ -52,12 +53,17 @@ func (a *App) Startup(ctx context.Context) {
 	a.log.Info("应用启动")
 
 	// 初始化数据库
-	if err := storage.Init(); err != nil {
+	db, err := storage.NewDB()
+	if err != nil {
 		a.log.Error("数据库初始化失败", "error", err)
+		return
 	}
+	a.db = db
 
-	// 初始化事件仓库（异步写入）
-	a.eventRepo = storage.NewEventRepo()
+	// 初始化仓库
+	a.settingsRepo = storage.NewSettingsRepo(db)
+	a.ruleSetRepo = storage.NewRuleSetRepo(db)
+	a.eventRepo = storage.NewEventRepo(db)
 	a.log.Debug("事件仓库初始化完成")
 }
 
@@ -84,8 +90,10 @@ func (a *App) Shutdown(ctx context.Context) {
 	}
 
 	// 关闭数据库连接
-	if err := storage.Close(); err != nil {
-		a.log.Error("关闭数据库失败", "error", err)
+	if a.db != nil {
+		if err := a.db.Close(); err != nil {
+			a.log.Error("关闭数据库失败", "error", err)
+		}
 	}
 
 	a.log.Info("应用已关闭")

@@ -7,17 +7,19 @@ import (
 )
 
 // SettingsRepo 设置仓库
-type SettingsRepo struct{}
+type SettingsRepo struct {
+	db *DB
+}
 
 // NewSettingsRepo 创建设置仓库实例
-func NewSettingsRepo() *SettingsRepo {
-	return &SettingsRepo{}
+func NewSettingsRepo(db *DB) *SettingsRepo {
+	return &SettingsRepo{db: db}
 }
 
 // Get 获取设置值
 func (r *SettingsRepo) Get(key string) (string, error) {
 	var setting Setting
-	result := DB().Where("key = ?", key).First(&setting)
+	result := r.db.GormDB().Where("key = ?", key).First(&setting)
 	if result.Error != nil {
 		return "", result.Error
 	}
@@ -40,18 +42,18 @@ func (r *SettingsRepo) Set(key, value string) error {
 		Value:     value,
 		UpdatedAt: time.Now(),
 	}
-	return DB().Save(&setting).Error
+	return r.db.GormDB().Save(&setting).Error
 }
 
 // Delete 删除设置
 func (r *SettingsRepo) Delete(key string) error {
-	return DB().Delete(&Setting{}, "key = ?", key).Error
+	return r.db.GormDB().Delete(&Setting{}, "key = ?", key).Error
 }
 
 // GetAll 获取所有设置
 func (r *SettingsRepo) GetAll() (map[string]string, error) {
 	var settings []Setting
-	if err := DB().Find(&settings).Error; err != nil {
+	if err := r.db.GormDB().Find(&settings).Error; err != nil {
 		return nil, err
 	}
 
@@ -64,7 +66,7 @@ func (r *SettingsRepo) GetAll() (map[string]string, error) {
 
 // SetMultiple 批量设置
 func (r *SettingsRepo) SetMultiple(kvs map[string]string) error {
-	return DB().Transaction(func(tx *gorm.DB) error {
+	return r.db.GormDB().Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 		for key, value := range kvs {
 			setting := Setting{

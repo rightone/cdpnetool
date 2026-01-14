@@ -9,6 +9,7 @@ import (
 
 // EventRepo 事件历史仓库
 type EventRepo struct {
+	db *DB
 	// 异步写入缓冲
 	buffer    []InterceptEventRecord
 	bufferMu  sync.Mutex
@@ -19,8 +20,9 @@ type EventRepo struct {
 }
 
 // NewEventRepo 创建事件仓库实例
-func NewEventRepo() *EventRepo {
+func NewEventRepo(db *DB) *EventRepo {
 	r := &EventRepo{
+		db:        db,
 		buffer:    make([]InterceptEventRecord, 0, 100),
 		batchSize: 50,
 		flushCh:   make(chan struct{}, 1),
@@ -64,7 +66,7 @@ func (r *EventRepo) flush() {
 	r.bufferMu.Unlock()
 
 	// 批量插入
-	if err := DB().CreateInBatches(toWrite, 100).Error; err != nil {
+	if err := r.db.GormDB().CreateInBatches(toWrite, 100).Error; err != nil {
 		// 记录错误但不阻塞
 		_ = err
 	}
@@ -110,7 +112,7 @@ func (r *EventRepo) Record(evt model.Event) {
 
 // Query 查询事件历史
 func (r *EventRepo) Query(opts QueryOptions) ([]InterceptEventRecord, int64, error) {
-	query := DB().Model(&InterceptEventRecord{})
+	query := r.db.GormDB().Model(&InterceptEventRecord{})
 
 	// 应用过滤条件
 	if opts.SessionID != "" {
@@ -169,13 +171,13 @@ type QueryOptions struct {
 
 // DeleteOldEvents 删除旧事件（数据清理）
 func (r *EventRepo) DeleteOldEvents(beforeTimestamp int64) (int64, error) {
-	result := DB().Where("timestamp < ?", beforeTimestamp).Delete(&InterceptEventRecord{})
+	result := r.db.GormDB().Where("timestamp < ?", beforeTimestamp).Delete(&InterceptEventRecord{})
 	return result.RowsAffected, result.Error
 }
 
 // DeleteBySession 删除指定会话的事件
 func (r *EventRepo) DeleteBySession(sessionID string) error {
-	return DB().Where("session_id = ?", sessionID).Delete(&InterceptEventRecord{}).Error
+	return r.db.GormDB().Where("session_id = ?", sessionID).Delete(&InterceptEventRecord{}).Error
 }
 
 // GetStats 获取事件统计
@@ -183,7 +185,7 @@ func (r *EventRepo) GetStats() (*EventStats, error) {
 	var stats EventStats
 
 	// 总数
-	if err := DB().Model(&InterceptEventRecord{}).Count(&stats.Total).Error; err != nil {
+	if err := r.db.GormDB().Model(&InterceptEventRecord{}).Count(&stats.Total).Error; err != nil {
 		return nil, err
 	}
 
@@ -193,7 +195,7 @@ func (r *EventRepo) GetStats() (*EventStats, error) {
 		Count int64
 	}
 	var typeCounts []typeCount
-	if err := DB().Model(&InterceptEventRecord{}).
+	if err := r.db.GormDB().Model(&InterceptEventRecord{}).
 		Select("type, count(*) as count").
 		Group("type").
 		Find(&typeCounts).Error; err != nil {

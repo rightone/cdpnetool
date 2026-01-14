@@ -4,60 +4,58 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-var (
-	db   *gorm.DB
-	once sync.Once
-)
-
-// Init 初始化数据库连接，自动执行迁移
-func Init() error {
-	var initErr error
-	once.Do(func() {
-		dbPath, err := getDBPath()
-		if err != nil {
-			initErr = err
-			return
-		}
-
-		// 确保目录存在
-		if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-			initErr = err
-			return
-		}
-
-		// 打开数据库连接
-		db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Silent),
-		})
-		if err != nil {
-			initErr = err
-			return
-		}
-
-		// 自动迁移
-		initErr = autoMigrate()
-	})
-	return initErr
+// DB 数据库连接管理器
+type DB struct {
+	gormDB *gorm.DB
 }
 
-// DB 获取数据库实例
-func DB() *gorm.DB {
-	return db
+// NewDB 创建新的数据库连接实例并执行迁移
+func NewDB() (*DB, error) {
+	dbPath, err := getDBPath()
+	if err != nil {
+		return nil, err
+	}
+
+	// 确保目录存在
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return nil, err
+	}
+
+	// 打开数据库连接
+	gormDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	db := &DB{gormDB: gormDB}
+
+	// 自动迁移
+	if err := db.autoMigrate(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// GormDB 获取 gorm.DB 实例
+func (d *DB) GormDB() *gorm.DB {
+	return d.gormDB
 }
 
 // Close 关闭数据库连接
-func Close() error {
-	if db == nil {
+func (d *DB) Close() error {
+	if d.gormDB == nil {
 		return nil
 	}
-	sqlDB, err := db.DB()
+	sqlDB, err := d.gormDB.DB()
 	if err != nil {
 		return err
 	}
@@ -98,8 +96,8 @@ func getDBPath() (string, error) {
 }
 
 // autoMigrate 自动迁移所有模型
-func autoMigrate() error {
-	return db.AutoMigrate(
+func (d *DB) autoMigrate() error {
+	return d.gormDB.AutoMigrate(
 		&Setting{},
 		&RuleSetRecord{},
 		&InterceptEventRecord{},
