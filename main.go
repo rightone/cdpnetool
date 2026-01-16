@@ -21,15 +21,18 @@ func main() {
 
 	// 启动 Wails 应用
 	err := wails.Run(&options.App{
-		Title:  "cdpnetool",
-		Width:  1200,
-		Height: 768,
+		Title:     "cdpnetool",
+		Width:     1200,
+		Height:    768,
+		MinWidth:  1200,
+		MinHeight: 768,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.Startup,
 		OnShutdown:       app.Shutdown,
+		OnBeforeClose:    app.BeforeClose,
 		Bind: []any{
 			app,
 		},

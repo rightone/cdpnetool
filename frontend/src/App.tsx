@@ -45,6 +45,11 @@ interface RuleSetRecord {
   updatedAt: string
 }
 
+interface OperationResult {
+  success: boolean
+  error?: string
+}
+
 // Wails 生成的绑定（需要在 wails dev 后生成）
 declare global {
   interface Window {
@@ -75,6 +80,8 @@ declare global {
           GetActiveRuleSet: () => Promise<{ ruleSet: RuleSetRecord | null; success: boolean; error?: string }>
           RenameRuleSet: (id: number, newName: string) => Promise<{ success: boolean; error?: string }>
           DuplicateRuleSet: (id: number, newName: string) => Promise<{ ruleSet: RuleSetRecord; success: boolean; error?: string }>
+          SetDirty: (dirty: boolean) => Promise<void>
+          ExportRuleSet: (name: string, json: string) => Promise<OperationResult>
         }
       }
     }
@@ -542,7 +549,8 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
   const [showRuleSetManager, setShowRuleSetManager] = useState(false)
   const [editingName, setEditingName] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
-  const [isInitializing, setIsInitializing] = useState(true) // 新增：初始化状态
+  const [isInitializing, setIsInitializing] = useState(true)
+  const [isDirty, setIsDirty] = useState(false)
 
   // 组件挂载时加载规则集列表和激活的规则集
   useEffect(() => {
@@ -587,6 +595,30 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
     }
   }
 
+  // 更新 Dirty 状态并通知后端
+  const updateDirty = (dirty: boolean) => {
+    setIsDirty(dirty)
+    window.go?.gui?.App?.SetDirty(dirty)
+  }
+
+  // 处理规则变更
+  const handleRulesChange = (rules: Rule[]) => {
+    setRuleSet({ ...ruleSet, rules })
+    updateDirty(true)
+  }
+
+  // 快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSaveAndApply()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [ruleSet, currentRuleSetId, currentRuleSetName, sessionId, isLoading])
+
   // 加载规则集数据到编辑器
   const loadRuleSetData = (record: RuleSetRecord) => {
     try {
@@ -594,6 +626,7 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
         setRuleSet(createEmptyRuleSet())
         setCurrentRuleSetId(record.id)
         setCurrentRuleSetName(record.name)
+        updateDirty(false)
         return
       }
       
@@ -610,14 +643,20 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
       
       setCurrentRuleSetId(record.id)
       setCurrentRuleSetName(record.name)
+      updateDirty(false)
     } catch (e) {
       console.error('Parse rules error:', e)
       setRuleSet(createEmptyRuleSet())
+      updateDirty(false)
     }
   }
 
   // 选择规则集
   const handleSelectRuleSet = async (record: RuleSetRecord) => {
+    if (isDirty) {
+      const confirm = window.confirm('当前规则有未保存的更改，切换规则集将丢失这些更改，是否继续？')
+      if (!confirm) return
+    }
     loadRuleSetData(record)
     // 设置为激活
     await window.go?.gui?.App?.SetActiveRuleSet(record.id)
@@ -705,11 +744,7 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
       ...ruleSet,
       rules: [...ruleSet.rules, createEmptyRule()]
     })
-  }
-
-  // 更新规则列表
-  const handleRulesChange = (rules: Rule[]) => {
-    setRuleSet({ ...ruleSet, rules })
+    updateDirty(true)
   }
 
   // 显示状态消息
@@ -736,26 +771,26 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
         return
       }
       
-      // 更新当前规则集ID（新建时会返回新ID）
+      // 更新当前规则集ID
       if (saveResult.ruleSet) {
         setCurrentRuleSetId(saveResult.ruleSet.id)
-        // 设置为激活规则集
         await window.go?.gui?.App?.SetActiveRuleSet(saveResult.ruleSet.id)
       }
       
+      updateDirty(false)
+
       // 2. 如果有会话，加载到会话
       if (sessionId) {
         const loadResult = await window.go?.gui?.App?.LoadRules(sessionId, rulesJson)
         if (loadResult?.success) {
           showStatusMessage('success', `已保存并应用 ${ruleSet.rules.length} 条规则`)
         } else {
-          showStatusMessage('success', `已保存 ${ruleSet.rules.length} 条规则（未连接会话）`)
+          showStatusMessage('success', `已保存 ${ruleSet.rules.length} 条规则（应用失败）`)
         }
       } else {
         showStatusMessage('success', `已保存 ${ruleSet.rules.length} 条规则`)
       }
       
-      // 刷新规则集列表
       await loadRuleSets()
     } catch (e) {
       showStatusMessage('error', String(e))
@@ -764,16 +799,15 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
     }
   }
 
-  // 导出 JSON
-  const handleExport = () => {
+  // 导出 JSON (原生对话框)
+  const handleExport = async () => {
     const json = JSON.stringify(ruleSet, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${currentRuleSetName}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    const result = await window.go?.gui?.App?.ExportRuleSet(currentRuleSetName || "ruleset", json)
+    if (result && !result.success) {
+      showStatusMessage('error', result.error || "导出失败")
+    } else if (result && result.success) {
+      showStatusMessage('success', '规则集导出成功')
+    }
   }
 
   // 导入 JSON
@@ -788,6 +822,7 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
         const imported = JSON.parse(json) as RuleSet
         if (imported.version && Array.isArray(imported.rules)) {
           setRuleSet(imported)
+          updateDirty(true)
           showStatusMessage('success', `导入成功，共 ${imported.rules.length} 条规则（请点保存以持久化）`)
         } else {
           showStatusMessage('error', 'JSON 格式不正确')
@@ -814,15 +849,13 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
         <>
       {/* 工具栏 - 第一行：规则集选择 */}
       <div className="flex items-center gap-2 mb-2 shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowRuleSetManager(!showRuleSetManager)}
-          className="gap-1"
-        >
-          <FolderOpen className="w-4 h-4" />
-          {currentRuleSetName || '选择规则集'}
-        </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowRuleSetManager(!showRuleSetManager)} className="gap-1">
+            <FolderOpen className="w-4 h-4" />
+            <div className="flex items-center gap-1">
+              {currentRuleSetName || '选择规则集'}
+              {isDirty && <div className="w-2 h-2 rounded-full bg-primary animate-pulse" title="有未保存更改" />}
+            </div>
+          </Button>
         <span className="text-xs text-muted-foreground">
           {ruleSets.length} 个规则集
         </span>
@@ -977,6 +1010,7 @@ function RulesPanel({ sessionId }: { sessionId: string | null }) {
             onChange={(e) => {
               try {
                 setRuleSet(JSON.parse(e.target.value))
+                updateDirty(true)
               } catch {}
             }}
             className="w-full h-full p-3 rounded-md border bg-background font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"

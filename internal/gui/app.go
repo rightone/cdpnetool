@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"cdpnetool/internal/browser"
@@ -27,6 +28,7 @@ type App struct {
 	settingsRepo   *storage.SettingsRepo
 	ruleSetRepo    *storage.RuleSetRepo
 	eventRepo      *storage.EventRepo
+	isDirty        bool
 }
 
 // NewApp 创建并返回一个新的 App 实例。
@@ -185,9 +187,81 @@ func (a *App) DetachTarget(sessionID, targetID string) OperationResult {
 	return OperationResult{Success: true}
 }
 
+// SetDirty 供前端更新未保存状态
+func (a *App) SetDirty(dirty bool) {
+	a.isDirty = dirty
+}
+
+// BeforeClose 在窗口关闭前调用，如果有未保存更改则弹出确认框
+func (a *App) BeforeClose(ctx context.Context) bool {
+	if !a.isDirty {
+		return false // 允许关闭
+	}
+
+	result, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+		Type:          runtime.QuestionDialog,
+		Title:         "提醒",
+		Message:       "当前有未保存的规则更改，确定要退出吗？",
+		DefaultButton: "否",
+		Buttons:       []string{"是", "否"},
+	})
+
+	if err != nil {
+		a.log.Warn("关闭确认对话框出错", "error", err)
+		// 出错时为安全起见，阻止关闭
+		return true
+	}
+
+	// 用户选"是"(要退出) -> 允许关闭(返回false)
+	// 用户选"否"(不退出) -> 阻止关闭(返回true)
+	return result == "否"
+}
+
+// ExportRuleSet 弹出原生保存对话框导出规则集
+func (a *App) ExportRuleSet(name, rulesJSON string) OperationResult {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: name + ".json",
+		Title:           "导出规则集",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
+		},
+	})
+
+	if err != nil {
+		return OperationResult{Success: false, Error: err.Error()}
+	}
+
+	if path == "" {
+		return OperationResult{Success: true} // 用户取消
+	}
+
+	err = os.WriteFile(path, []byte(rulesJSON), 0644)
+	if err != nil {
+		return OperationResult{Success: false, Error: "文件写入失败: " + err.Error()}
+	}
+
+	return OperationResult{Success: true}
+}
+
 // EnableInterception 启用指定会话的网络拦截功能。
 func (a *App) EnableInterception(sessionID string) OperationResult {
-	err := a.service.EnableInterception(model.SessionID(sessionID))
+	// 检查是否已经附加了目标
+	targets, err := a.service.ListTargets(model.SessionID(sessionID))
+	hasAttached := false
+	if err == nil {
+		for _, t := range targets {
+			if t.IsCurrent {
+				hasAttached = true
+				break
+			}
+		}
+	}
+
+	if !hasAttached {
+		return OperationResult{Success: false, Error: "请先在 Targets 标签页附加至少一个目标"}
+	}
+
+	err = a.service.EnableInterception(model.SessionID(sessionID))
 	if err != nil {
 		a.log.Error("启用拦截失败", "sessionID", sessionID, "error", err)
 		return OperationResult{Success: false, Error: err.Error()}
@@ -203,6 +277,7 @@ func (a *App) DisableInterception(sessionID string) OperationResult {
 		a.log.Error("停用拦截失败", "sessionID", sessionID, "error", err)
 		return OperationResult{Success: false, Error: err.Error()}
 	}
+
 	a.log.Info("已停用拦截", "sessionID", sessionID)
 	return OperationResult{Success: true}
 }

@@ -18,6 +18,8 @@ export function DuplicateRuleSet(arg1:number,arg2:string):Promise<gui.RuleSetRes
 
 export function EnableInterception(arg1:string):Promise<gui.OperationResult>;
 
+export function ExportRuleSet(arg1:string,arg2:string):Promise<gui.OperationResult>;
+
 export function GetActiveRuleSet():Promise<gui.RuleSetResult>;
 
 export function GetAllSettings():Promise<gui.SettingsResult>;
@@ -51,6 +53,8 @@ export function RenameRuleSet(arg1:number,arg2:string):Promise<gui.OperationResu
 export function SaveRuleSet(arg1:number,arg2:string,arg3:string):Promise<gui.RuleSetResult>;
 
 export function SetActiveRuleSet(arg1:number):Promise<gui.OperationResult>;
+
+export function SetDirty(arg1:boolean):Promise<void>;
 
 export function SetMultipleSettings(arg1:string):Promise<gui.OperationResult>;
 

@@ -34,6 +34,10 @@ export function EnableInterception(arg1) {
   return window['go']['gui']['App']['EnableInterception'](arg1);
 }
 
+export function ExportRuleSet(arg1, arg2) {
+  return window['go']['gui']['App']['ExportRuleSet'](arg1, arg2);
+}
+
 export function GetActiveRuleSet() {
   return window['go']['gui']['App']['GetActiveRuleSet']();
 }
@@ -100,6 +104,10 @@ export function SaveRuleSet(arg1, arg2, arg3) {
 
 export function SetActiveRuleSet(arg1) {
   return window['go']['gui']['App']['SetActiveRuleSet'](arg1);
+}
+
+export function SetDirty(arg1) {
+  return window['go']['gui']['App']['SetDirty'](arg1);
 }
 
 export function SetMultipleSettings(arg1) {
