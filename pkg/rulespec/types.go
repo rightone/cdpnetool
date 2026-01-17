@@ -1,11 +1,29 @@
 // Package rulespec 定义规则配置的类型规范 (v2)
 package rulespec
 
-import "github.com/google/uuid"
+import (
+	"crypto/rand"
+	"fmt"
+	"regexp"
+	"time"
+)
 
 // 配置版本常量
 const (
 	DefaultConfigVersion = "1.0" // 默认配置版本
+)
+
+// ID 格式约束
+const (
+	ConfigIDMinLen = 3
+	ConfigIDMaxLen = 64
+	RuleIDMinLen   = 1
+	RuleIDMaxLen   = 64
+)
+
+// ID 格式正则
+var (
+	idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 )
 
 // Config 配置文件根结构
@@ -18,10 +36,58 @@ type Config struct {
 	Rules       []Rule         `json:"rules"`       // 规则列表
 }
 
-// NewConfig 创建一个新的空配置（带 UUID）
+// GenerateConfigID 生成配置 ID，格式：config-YYYYMMDD-随机6位
+func GenerateConfigID() string {
+	dateStr := time.Now().Format("20060102")
+	randomStr := generateRandomString(6)
+	return fmt.Sprintf("config-%s-%s", dateStr, randomStr)
+}
+
+// GenerateRuleID 生成规则 ID，格式：rule-XXX（三位数字序号）
+func GenerateRuleID(index int) string {
+	return fmt.Sprintf("rule-%03d", index+1)
+}
+
+// ValidateConfigID 校验配置 ID 格式
+func ValidateConfigID(id string) error {
+	if len(id) < ConfigIDMinLen || len(id) > ConfigIDMaxLen {
+		return fmt.Errorf("配置 ID 长度必须在 %d-%d 之间", ConfigIDMinLen, ConfigIDMaxLen)
+	}
+	if !idPattern.MatchString(id) {
+		return fmt.Errorf("配置 ID 只能包含字母、数字、横线和下划线")
+	}
+	return nil
+}
+
+// ValidateRuleID 校验规则 ID 格式
+func ValidateRuleID(id string) error {
+	if len(id) < RuleIDMinLen || len(id) > RuleIDMaxLen {
+		return fmt.Errorf("规则 ID 长度必须在 %d-%d 之间", RuleIDMinLen, RuleIDMaxLen)
+	}
+	if !idPattern.MatchString(id) {
+		return fmt.Errorf("规则 ID 只能包含字母、数字、横线和下划线")
+	}
+	return nil
+}
+
+// generateRandomString 生成指定长度的随机字符串（字母+数字）
+func generateRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		// 如果随机数生成失败，使用时间戳作为回退
+		return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b)
+}
+
+// NewConfig 创建一个新的空配置
 func NewConfig(name string) *Config {
 	return &Config{
-		ID:          uuid.New().String(),
+		ID:          GenerateConfigID(),
 		Name:        name,
 		Version:     DefaultConfigVersion,
 		Description: "",
@@ -49,10 +115,10 @@ type Rule struct {
 	Actions  []Action `json:"actions"`  // 执行行为列表
 }
 
-// NewRule 创建一个新的空规则（带 UUID）
-func NewRule(name string) Rule {
+// NewRule 创建一个新的空规则，index 为当前规则列表中的索引
+func NewRule(name string, index int) Rule {
 	return Rule{
-		ID:       uuid.New().String(),
+		ID:       GenerateRuleID(index),
 		Name:     name,
 		Enabled:  true,
 		Priority: 0,

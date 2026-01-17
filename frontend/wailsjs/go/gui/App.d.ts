@@ -20,7 +20,7 @@ export function EnableInterception(arg1:string):Promise<gui.OperationResult>;
 
 export function ExportConfig(arg1:string,arg2:string):Promise<gui.OperationResult>;
 
-export function GenerateNewRule(arg1:string):Promise<gui.NewRuleResult>;
+export function GenerateNewRule(arg1:string,arg2:number):Promise<gui.NewRuleResult>;
 
 export function GetActiveConfig():Promise<gui.ConfigResult>;
 
@@ -38,6 +38,8 @@ export function GetRuleStats(arg1:string):Promise<gui.StatsResult>;
 
 export function GetSetting(arg1:string):Promise<string>;
 
+export function ImportConfig(arg1:string):Promise<gui.ConfigResult>;
+
 export function LaunchBrowser(arg1:boolean):Promise<gui.LaunchBrowserResult>;
 
 export function ListConfigs():Promise<gui.ConfigListResult>;
@@ -52,7 +54,7 @@ export function QueryEventHistory(arg1:string,arg2:string,arg3:string,arg4:strin
 
 export function RenameConfig(arg1:number,arg2:string):Promise<gui.OperationResult>;
 
-export function SaveConfig(arg1:number,arg2:string,arg3:string,arg4:string):Promise<gui.ConfigResult>;
+export function SaveConfig(arg1:number,arg2:string):Promise<gui.ConfigResult>;
 
 export function SetActiveConfig(arg1:number):Promise<gui.OperationResult>;
 

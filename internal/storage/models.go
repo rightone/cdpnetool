@@ -21,14 +21,14 @@ const (
 
 // ConfigRecord 配置表（存储规则配置）
 type ConfigRecord struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`             // 主键ID
-	Name        string    `gorm:"uniqueIndex;not null" json:"name"` // 配置名称
-	Description string    `gorm:"type:text" json:"description"`     // 配置描述
-	Version     string    `json:"version"`                          // 配置格式版本
-	RulesJSON   string    `gorm:"type:text" json:"rulesJson"`       // JSON 序列化的规则数组
-	IsActive    bool      `gorm:"default:false" json:"isActive"`    // 是否为激活配置
-	CreatedAt   time.Time `json:"createdAt"`                        // 创建时间
-	UpdatedAt   time.Time `json:"updatedAt"`                        // 更新时间
+	ID         uint      `gorm:"primaryKey" json:"id"`                 // 数据库主键（内部使用）
+	ConfigID   string    `gorm:"uniqueIndex;not null" json:"configId"` // 配置业务ID（唯一索引）
+	Name       string    `gorm:"not null" json:"name"`                 // 配置名称
+	Version    string    `json:"version"`                              // 配置格式版本
+	ConfigJSON string    `gorm:"type:text" json:"configJson"`          // 完整配置 JSON
+	IsActive   bool      `gorm:"default:false" json:"isActive"`        // 是否为激活配置
+	CreatedAt  time.Time `json:"createdAt"`                            // 创建时间
+	UpdatedAt  time.Time `json:"updatedAt"`                            // 更新时间
 }
 
 // InterceptEventRecord 拦截事件历史表

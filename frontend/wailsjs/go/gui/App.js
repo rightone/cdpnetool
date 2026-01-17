@@ -38,8 +38,8 @@ export function ExportConfig(arg1, arg2) {
   return window['go']['gui']['App']['ExportConfig'](arg1, arg2);
 }
 
-export function GenerateNewRule(arg1) {
-  return window['go']['gui']['App']['GenerateNewRule'](arg1);
+export function GenerateNewRule(arg1, arg2) {
+  return window['go']['gui']['App']['GenerateNewRule'](arg1, arg2);
 }
 
 export function GetActiveConfig() {
@@ -74,6 +74,10 @@ export function GetSetting(arg1) {
   return window['go']['gui']['App']['GetSetting'](arg1);
 }
 
+export function ImportConfig(arg1) {
+  return window['go']['gui']['App']['ImportConfig'](arg1);
+}
+
 export function LaunchBrowser(arg1) {
   return window['go']['gui']['App']['LaunchBrowser'](arg1);
 }
@@ -102,8 +106,8 @@ export function RenameConfig(arg1, arg2) {
   return window['go']['gui']['App']['RenameConfig'](arg1, arg2);
 }
 
-export function SaveConfig(arg1, arg2, arg3, arg4) {
-  return window['go']['gui']['App']['SaveConfig'](arg1, arg2, arg3, arg4);
+export function SaveConfig(arg1, arg2) {
+  return window['go']['gui']['App']['SaveConfig'](arg1, arg2);
 }
 
 export function SetActiveConfig(arg1) {

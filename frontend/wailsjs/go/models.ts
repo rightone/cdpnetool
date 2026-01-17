@@ -368,10 +368,10 @@ export namespace storage {
 	
 	export class ConfigRecord {
 	    id: number;
+	    configId: string;
 	    name: string;
-	    description: string;
 	    version: string;
-	    rulesJson: string;
+	    configJson: string;
 	    isActive: boolean;
 	    // Go type: time
 	    createdAt: any;
@@ -385,10 +385,10 @@ export namespace storage {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.configId = source["configId"];
 	        this.name = source["name"];
-	        this.description = source["description"];
 	        this.version = source["version"];
-	        this.rulesJson = source["rulesJson"];
+	        this.configJson = source["configJson"];
 	        this.isActive = source["isActive"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);

@@ -489,22 +489,22 @@ type NewConfigResult struct {
 	Error      string                `json:"error,omitempty"`
 }
 
-// CreateNewConfig 创建一个新的空配置（含 UUID）并保存到数据库。
+// CreateNewConfig 创建一个新的空配置并保存到数据库。
 func (a *App) CreateNewConfig(name string) NewConfigResult {
-	// 使用 rulespec.NewConfig 创建带 UUID 的标准配置
+	// 使用 rulespec.NewConfig 创建标准配置
 	cfg := rulespec.NewConfig(name)
+
+	// 保存到数据库
+	config, err := a.configRepo.Create(cfg)
+	if err != nil {
+		a.log.Err(err, "创建配置失败", "name", name)
+		return NewConfigResult{Success: false, Error: err.Error()}
+	}
 
 	// 序列化配置 JSON
 	configJSON, err := json.Marshal(cfg)
 	if err != nil {
 		a.log.Err(err, "序列化配置失败")
-		return NewConfigResult{Success: false, Error: err.Error()}
-	}
-
-	// 保存到数据库
-	config, err := a.configRepo.SaveFromRulespecConfig(0, name, "", cfg)
-	if err != nil {
-		a.log.Err(err, "创建配置失败", "name", name)
 		return NewConfigResult{Success: false, Error: err.Error()}
 	}
 
@@ -519,9 +519,9 @@ type NewRuleResult struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// GenerateNewRule 生成一个新的空规则（含 UUID）。
-func (a *App) GenerateNewRule(name string) NewRuleResult {
-	rule := rulespec.NewRule(name)
+// GenerateNewRule 生成一个新的空规则，existingCount 为当前规则列表中的规则数量。
+func (a *App) GenerateNewRule(name string, existingCount int) NewRuleResult {
+	rule := rulespec.NewRule(name, existingCount)
 	ruleJSON, err := json.Marshal(rule)
 	if err != nil {
 		a.log.Err(err, "序列化规则失败")
@@ -530,21 +530,21 @@ func (a *App) GenerateNewRule(name string) NewRuleResult {
 	return NewRuleResult{RuleJSON: string(ruleJSON), Success: true}
 }
 
-// SaveConfig 保存配置（创建或更新），id 为 0 时创建新配置。
-func (a *App) SaveConfig(id uint, name string, description string, rulesJSON string) ConfigResult {
+// SaveConfig 保存配置（创建或更新），dbID 为 0 时创建新配置。
+func (a *App) SaveConfig(dbID uint, configJSON string) ConfigResult {
 	var cfg rulespec.Config
-	if err := json.Unmarshal([]byte(rulesJSON), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
 		a.log.Err(err, "保存配置 JSON 解析失败")
 		return ConfigResult{Success: false, Error: "JSON 解析失败: " + err.Error()}
 	}
 
-	config, err := a.configRepo.SaveFromRulespecConfig(id, name, description, &cfg)
+	config, err := a.configRepo.Save(dbID, &cfg)
 	if err != nil {
-		a.log.Err(err, "保存配置失败", "id", id, "name", name)
+		a.log.Err(err, "保存配置失败", "dbID", dbID, "configID", cfg.ID)
 		return ConfigResult{Success: false, Error: err.Error()}
 	}
 
-	a.log.Info("配置已保存", "id", config.ID, "name", name)
+	a.log.Info("配置已保存", "dbID", config.ID, "configID", cfg.ID, "name", cfg.Name)
 	return ConfigResult{Config: config, Success: true}
 }
 
@@ -592,6 +592,24 @@ func (a *App) RenameConfig(id uint, newName string) OperationResult {
 	}
 	a.log.Debug("配置已重命名", "id", id, "newName", newName)
 	return OperationResult{Success: true}
+}
+
+// ImportConfig 导入配置（根据配置 ID 判断覆盖或新增）。
+func (a *App) ImportConfig(configJSON string) ConfigResult {
+	var cfg rulespec.Config
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		a.log.Err(err, "导入配置 JSON 解析失败")
+		return ConfigResult{Success: false, Error: "JSON 解析失败: " + err.Error()}
+	}
+
+	config, err := a.configRepo.Upsert(&cfg)
+	if err != nil {
+		a.log.Err(err, "导入配置失败", "configID", cfg.ID)
+		return ConfigResult{Success: false, Error: err.Error()}
+	}
+
+	a.log.Info("配置已导入", "dbID", config.ID, "configID", cfg.ID, "name", cfg.Name)
+	return ConfigResult{Config: config, Success: true}
 }
 
 // LoadActiveConfigToSession 加载当前激活的配置到活跃会话。

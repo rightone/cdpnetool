@@ -33,11 +33,11 @@ import {
 
 // 配置记录类型
 interface ConfigRecord {
-  id: number
+  id: number           // 数据库主键ID
+  configId: string     // 配置业务ID
   name: string
-  description: string
   version: string
-  rulesJson: string
+  configJson: string   // 完整配置 JSON
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -72,16 +72,17 @@ declare global {
           // 配置持久化 API
           ListConfigs: () => Promise<{ configs: ConfigRecord[]; success: boolean; error?: string }>
           GetConfig: (id: number) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
-          SaveConfig: (id: number, name: string, description: string, rulesJson: string) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
+          SaveConfig: (id: number, configJson: string) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
           DeleteConfig: (id: number) => Promise<{ success: boolean; error?: string }>
           SetActiveConfig: (id: number) => Promise<{ success: boolean; error?: string }>
           GetActiveConfig: () => Promise<{ config: ConfigRecord | null; success: boolean; error?: string }>
           RenameConfig: (id: number, newName: string) => Promise<{ success: boolean; error?: string }>
           SetDirty: (dirty: boolean) => Promise<void>
           ExportConfig: (name: string, json: string) => Promise<OperationResult>
-          // 创建新配置/规则 API（生成 UUID）
+          ImportConfig: (json: string) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
+          // 创建新配置/规则 API
           CreateNewConfig: (name: string) => Promise<{ config: ConfigRecord; configJson: string; success: boolean; error?: string }>
-          GenerateNewRule: (name: string) => Promise<{ ruleJson: string; success: boolean; error?: string }>
+          GenerateNewRule: (name: string, existingCount: number) => Promise<{ ruleJson: string; success: boolean; error?: string }>
         }
       }
     }
@@ -478,7 +479,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
   const [ruleSets, setRuleSets] = useState<ConfigRecord[]>([])
   const [currentRuleSetId, setCurrentRuleSetId] = useState<number>(0)
   const [currentRuleSetName, setCurrentRuleSetName] = useState<string>('默认配置')
-  const [currentDescription, setCurrentDescription] = useState<string>('')
   const [activeConfigId, setActiveConfigId] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [editingName, setEditingName] = useState<number | null>(null)
@@ -568,61 +568,30 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
     try {
       let config: Config
       
-      if (!record.rulesJson) {
-        // 空配置，创建完整结构（保留 UUID 如果有的话）
+      if (!record.configJson) {
+        // 空配置，创建完整结构
         config = {
+          id: record.configId,
+          name: record.name,
           version: record.version || '1.0',
-          description: record.description || '',
+          description: '',
           settings: {},
           rules: []
         }
       } else {
-        const parsed = JSON.parse(record.rulesJson)
-        // 兼容两种格式：数组或完整对象
-        if (Array.isArray(parsed)) {
-          // 旧格式（纯规则数组），包装成完整结构
-          config = {
-            version: record.version || '1.0',
-            description: record.description || '',
-            settings: {},
-            rules: parsed
-          }
-        } else if (parsed.rules && Array.isArray(parsed.rules)) {
-          // 完整格式，保留所有字段（包括原始 UUID）
-          config = {
-            id: parsed.id,  // 保留配置 JSON 中的原始 ID（UUID）
-            name: parsed.name,
-            version: parsed.version || '1.0',
-            description: parsed.description ?? record.description ?? '',
-            settings: parsed.settings || {},
-            rules: parsed.rules
-          }
-        } else {
-          console.error('Invalid rules format:', parsed)
-          config = {
-            version: '1.0',
-            description: '',
-            settings: {},
-            rules: []
-          }
-        }
+        // 从 configJson 解析完整配置
+        config = JSON.parse(record.configJson) as Config
       }
       
       setRuleSet(config)
       setCurrentRuleSetId(record.id)  // 数据库 ID 用于数据库操作
-      setCurrentRuleSetName(record.name)
-      setCurrentDescription(record.description || '')
+      setCurrentRuleSetName(config.name || record.name)
       setJsonEditorContent(JSON.stringify(config, null, 2))  // 同步 JSON 编辑器
       setJsonError(null)
       updateDirty(false)
     } catch (e) {
-      console.error('Parse rules error:', e)
-      const emptyConfig = {
-        version: '1.0',
-        description: '',
-        settings: {},
-        rules: []
-      }
+      console.error('Parse config error:', e)
+      const emptyConfig = createEmptyConfig()
       setRuleSet(emptyConfig)
       setJsonEditorContent(JSON.stringify(emptyConfig, null, 2))
       setJsonError(null)
@@ -671,7 +640,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
         setRuleSet(newConfig)
         setCurrentRuleSetId(result.config.id)
         setCurrentRuleSetName(result.config.name)
-        setCurrentDescription(result.config.description || '')
         setJsonEditorContent(result.configJson)  // 同步 JSON 编辑器
         setJsonError(null)
         await window.go?.gui?.App?.SetActiveConfig(result.config.id)
@@ -713,7 +681,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
             setRuleSet(createEmptyConfig())
             setCurrentRuleSetId(0)
             setCurrentRuleSetName('')
-            setCurrentDescription('')
             setActiveConfigId(null)
             updateDirty(false)
           }
@@ -758,22 +725,8 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
       }
       
       try {
-        // 加载规则到会话 - 需要确保是完整的 Config 格式
-        let configJson: string
-        if (config.rulesJson) {
-          const parsed = JSON.parse(config.rulesJson)
-          if (Array.isArray(parsed)) {
-            // 如果是数组格式，包装成完整的 Config
-            configJson = JSON.stringify({ version: config.version || '1.0', rules: parsed })
-          } else if (parsed.version && parsed.rules) {
-            // 已经是完整格式
-            configJson = config.rulesJson
-          } else {
-            configJson = JSON.stringify({ version: '1.0', rules: [] })
-          }
-        } else {
-          configJson = JSON.stringify({ version: '1.0', rules: [] })
-        }
+        // 加载规则到会话 - 直接使用 configJson
+        const configJson = config.configJson || JSON.stringify({ version: '1.0', rules: [] })
         const loadResult = await window.go?.gui?.App?.LoadRules(sessionId!, configJson)
         if (!loadResult?.success) {
           toast({ variant: 'destructive', title: '加载规则失败', description: loadResult?.error })
@@ -815,8 +768,9 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
   // 计算配置中的规则数量
   const getRuleCount = (config: ConfigRecord) => {
     try {
-      const parsed = JSON.parse(config.rulesJson || '[]')
-      return Array.isArray(parsed) ? parsed.length : (parsed.rules?.length || 0)
+      if (!config.configJson) return 0
+      const parsed = JSON.parse(config.configJson)
+      return parsed.rules?.length || 0
     } catch {
       return 0
     }
@@ -824,10 +778,10 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
 
   // 右键菜单 - 已移除
 
-  // 添加新规则（调用后端生成 UUID）
+  // 添加新规则（调用后端生成 ID）
   const handleAddRule = async () => {
     try {
-      const result = await window.go?.gui?.App?.GenerateNewRule('新规则')
+      const result = await window.go?.gui?.App?.GenerateNewRule('新规则', ruleSet.rules.length)
       if (result?.success) {
         const newRule = JSON.parse(result.ruleJson) as Rule
         setRuleSet({
@@ -865,13 +819,16 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
     
     setIsLoading(true)
     try {
-      const rulesJson = JSON.stringify(ruleSet)
+      // 同步名称到 ruleSet
+      const configToSave = {
+        ...ruleSet,
+        name: currentRuleSetName
+      }
+      const configJson = JSON.stringify(configToSave)
       
       const saveResult = await window.go?.gui?.App?.SaveConfig(
         currentRuleSetId,
-        currentRuleSetName,
-        currentDescription,
-        rulesJson
+        configJson
       )
       
       if (!saveResult?.success) {
@@ -888,7 +845,7 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
       
       // 如果当前配置是激活状态，重新加载规则到会话
       if (currentRuleSetId === activeConfigId && sessionId) {
-        await window.go?.gui?.App?.LoadRules(sessionId, rulesJson)
+        await window.go?.gui?.App?.LoadRules(sessionId, configJson)
         toast({ variant: 'success', title: `已保存并更新 ${ruleSet.rules.length} 条规则` })
       } else {
         toast({ variant: 'success', title: `已保存 ${ruleSet.rules.length} 条规则` })
@@ -1070,9 +1027,9 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
                   <div className="flex items-start gap-2">
                     <span className="text-sm text-muted-foreground whitespace-nowrap w-16 pt-2">描述:</span>
                     <Textarea
-                      value={currentDescription}
+                      value={ruleSet.description || ''}
                       onChange={(e) => {
-                        setCurrentDescription(e.target.value)
+                        setRuleSet({ ...ruleSet, description: e.target.value })
                         updateDirty(true)
                       }}
                       placeholder="配置描述（可选）"
