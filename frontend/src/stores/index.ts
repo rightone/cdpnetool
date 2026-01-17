@@ -23,8 +23,6 @@ interface SessionState {
   isIntercepting: boolean
   targets: TargetInfo[]
   attachedTargets: Set<string>
-  
-  // 事件分开存储
   matchedEvents: MatchedEventWithId[]    // 匹配的事件（会存入数据库）
   unmatchedEvents: UnmatchedEventWithId[] // 未匹配的事件（仅内存）
   

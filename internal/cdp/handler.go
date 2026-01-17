@@ -18,6 +18,7 @@ func (m *Manager) handle(ts *targetSession, ev *fetch.RequestPausedReply) {
 	if to <= 0 {
 		to = 3000
 	}
+
 	ctx, cancel := context.WithTimeout(ts.ctx, time.Duration(to)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
@@ -33,7 +34,7 @@ func (m *Manager) handle(ts *targetSession, ev *fetch.RequestPausedReply) {
 	m.log.Debug("开始处理拦截事件", "stage", stage, "url", ev.Request.URL, "method", ev.Request.Method)
 
 	// 构建评估上下文（基于请求信息）
-	evalCtx := m.buildEvalContext(ts, ev)
+	evalCtx := m.buildEvalContext(ev)
 
 	// 评估匹配规则
 	if m.engine == nil {
@@ -157,7 +158,7 @@ func (m *Manager) executeRequestStageWithTracking(
 		if mut.Block != nil {
 			m.executor.ApplyRequestMutation(ctx, ts, ev, mut)
 			// 发送 blocked 事件
-			m.sendMatchedEvent(ts.id, ev, rulespec.StageRequest, "blocked", ruleMatches, requestInfo, responseInfo)
+			m.sendMatchedEvent(ts.id, "blocked", ruleMatches, requestInfo, responseInfo)
 			m.log.Info("请求被阻止", "rule", rule.ID, "url", ev.Request.URL)
 			return
 		}
@@ -188,7 +189,7 @@ func (m *Manager) executeRequestStageWithTracking(
 	}
 
 	// 发送匹配事件
-	m.sendMatchedEvent(ts.id, ev, rulespec.StageRequest, finalResult, ruleMatches, modifiedRequestInfo, modifiedResponseInfo)
+	m.sendMatchedEvent(ts.id, finalResult, ruleMatches, modifiedRequestInfo, modifiedResponseInfo)
 	m.log.Debug("请求阶段处理完成", "result", finalResult, "duration", time.Since(start))
 }
 
@@ -243,12 +244,12 @@ func (m *Manager) executeResponseStageWithTracking(
 		finalResult = "modified"
 		modifiedResponseInfo := m.captureModifiedResponseData(responseInfo, aggregatedMut, responseBody)
 		// 发送匹配事件
-		m.sendMatchedEvent(ts.id, ev, rulespec.StageResponse, finalResult, ruleMatches, requestInfo, modifiedResponseInfo)
+		m.sendMatchedEvent(ts.id, finalResult, ruleMatches, requestInfo, modifiedResponseInfo)
 	} else {
 		m.executor.ContinueResponse(ctx, ts, ev)
 		finalResult = "passed"
 		// 发送匹配事件
-		m.sendMatchedEvent(ts.id, ev, rulespec.StageResponse, finalResult, ruleMatches, requestInfo, responseInfo)
+		m.sendMatchedEvent(ts.id, finalResult, ruleMatches, requestInfo, responseInfo)
 	}
 	m.log.Debug("响应阶段处理完成", "result", finalResult, "duration", time.Since(start))
 }
@@ -455,8 +456,6 @@ func (m *Manager) degradeAndContinue(ts *targetSession, ev *fetch.RequestPausedR
 // sendMatchedEvent 发送匹配事件
 func (m *Manager) sendMatchedEvent(
 	target model.TargetID,
-	ev *fetch.RequestPausedReply,
-	stage rulespec.Stage,
 	finalResult string,
 	matchedRules []model.RuleMatch,
 	requestInfo model.RequestInfo,

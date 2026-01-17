@@ -247,7 +247,7 @@ func (m *Manager) Disable() error {
 }
 
 // buildEvalContext 构造规则匹配上下文
-func (m *Manager) buildEvalContext(ts *targetSession, ev *fetch.RequestPausedReply) *rules.EvalContext {
+func (m *Manager) buildEvalContext(ev *fetch.RequestPausedReply) *rules.EvalContext {
 	h := map[string]string{}
 	q := map[string]string{}
 	ck := map[string]string{}
@@ -389,6 +389,7 @@ func (m *Manager) ListTargets(ctx context.Context) ([]model.TargetInfo, error) {
 	if m.devtoolsURL == "" {
 		return nil, fmt.Errorf("devtools url empty")
 	}
+
 	dt := devtool.New(m.devtoolsURL)
 	targets, err := dt.List(ctx)
 	if err != nil {
@@ -455,11 +456,13 @@ func (m *Manager) GetStats() model.EngineStats {
 	if m.engine == nil {
 		return model.EngineStats{ByRule: make(map[model.RuleID]int64)}
 	}
+
 	stats := m.engine.GetStats()
 	byRule := make(map[model.RuleID]int64, len(stats.ByRule))
 	for k, v := range stats.ByRule {
 		byRule[model.RuleID(k)] = v
 	}
+
 	return model.EngineStats{
 		Total:   stats.Total,
 		Matched: stats.Matched,

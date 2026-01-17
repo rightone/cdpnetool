@@ -34,24 +34,16 @@ type TargetInfo struct {
 	IsCurrent bool     `json:"isCurrent"`
 }
 
-// ==================== 事件系统 ====================
-
-// NetworkEvent 网络请求事件（通用结构，包含完整请求响应信息）
+// NetworkEvent 网络请求事件
 type NetworkEvent struct {
-	Session   SessionID `json:"session"`
-	Target    TargetID  `json:"target"`
-	Timestamp int64     `json:"timestamp"`
-	IsMatched bool      `json:"isMatched"`
-
-	// 请求信息
-	Request RequestInfo `json:"request"`
-
-	// 响应信息（可能为空，例如被阻断的请求）
-	Response ResponseInfo `json:"response,omitempty"`
-
-	// 匹配信息（仅匹配请求有）
-	FinalResult  string      `json:"finalResult,omitempty"`
-	MatchedRules []RuleMatch `json:"matchedRules,omitempty"`
+	Session      SessionID    `json:"session"`
+	Target       TargetID     `json:"target"`
+	Timestamp    int64        `json:"timestamp"`
+	IsMatched    bool         `json:"isMatched"`
+	Request      RequestInfo  `json:"request"`
+	Response     ResponseInfo `json:"response,omitempty"`
+	FinalResult  string       `json:"finalResult,omitempty"`
+	MatchedRules []RuleMatch  `json:"matchedRules,omitempty"`
 }
 
 // RequestInfo 请求信息
@@ -96,11 +88,7 @@ type UnmatchedEvent struct {
 
 // InterceptEvent 统一事件接口（用于通道传输）
 type InterceptEvent struct {
-	IsMatched bool `json:"isMatched"`
-
-	// 匹配事件数据（IsMatched=true 时有效）
-	Matched *MatchedEvent `json:"matched,omitempty"`
-
-	// 未匹配事件数据（IsMatched=false 时有效）
+	IsMatched bool            `json:"isMatched"`
+	Matched   *MatchedEvent   `json:"matched,omitempty"`
 	Unmatched *UnmatchedEvent `json:"unmatched,omitempty"`
 }

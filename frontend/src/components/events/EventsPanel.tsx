@@ -77,12 +77,12 @@ export function EventsPanel({
   )
 }
 
-// ========== 匹配事件列表 ==========
 interface MatchedEventsListProps {
   events: MatchedEventWithId[]
   onClear?: () => void
 }
 
+// 匹配事件列表
 function MatchedEventsList({ events, onClear }: MatchedEventsListProps) {
   const [search, setSearch] = useState('')
   const [resultFilter, setResultFilter] = useState<FinalResultType | 'all'>('all')
@@ -190,12 +190,12 @@ function MatchedEventsList({ events, onClear }: MatchedEventsListProps) {
   )
 }
 
-// ========== 未匹配事件列表 ==========
 interface UnmatchedEventsListProps {
   events: UnmatchedEventWithId[]
   onClear?: () => void
 }
 
+// 未匹配事件列表
 function UnmatchedEventsList({ events, onClear }: UnmatchedEventsListProps) {
   const [search, setSearch] = useState('')
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
@@ -269,13 +269,13 @@ function UnmatchedEventsList({ events, onClear }: UnmatchedEventsListProps) {
   )
 }
 
-// ========== 匹配事件项 ==========
 interface MatchedEventItemProps {
   event: MatchedEventWithId
   isExpanded: boolean
   onToggleExpand: () => void
 }
 
+// 匹配事件项
 function MatchedEventItem({ event, isExpanded, onToggleExpand }: MatchedEventItemProps) {
   const [copied, setCopied] = useState(false)
   const colors = FINAL_RESULT_COLORS[event.networkEvent.finalResult!] || FINAL_RESULT_COLORS.passed
@@ -488,13 +488,13 @@ function MatchedEventItem({ event, isExpanded, onToggleExpand }: MatchedEventIte
   )
 }
 
-// ========== 未匹配事件项 ==========
 interface UnmatchedEventItemProps {
   event: UnmatchedEventWithId
   isExpanded: boolean
   onToggleExpand: () => void
 }
 
+// 未匹配事件项
 function UnmatchedEventItem({ event, isExpanded, onToggleExpand }: UnmatchedEventItemProps) {
   const [copied, setCopied] = useState(false)
 

@@ -3,12 +3,10 @@ package config
 // Config 配置文件结构体
 type Config struct {
 	Version string `yaml:"version"`
-
-	Sqlite struct {
+	Sqlite  struct {
 		Db     string `yaml:"db"`
 		Prefix string `yaml:"prefix"`
 	} `yaml:"sqlite"`
-
 	Log struct {
 		Level  string   `yaml:"level"`
 		Writer []string `yaml:"writer"`

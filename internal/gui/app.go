@@ -51,8 +51,8 @@ func (a *App) Startup(ctx context.Context) {
 	a.log.Info("应用启动")
 
 	// 初始化数据库
-	gormLogger := storage.NewGormLogger(a.log)
-	db, err := storage.NewDB(a.cfg, gormLogger)
+	l := storage.NewGormLogger(a.log)
+	db, err := storage.NewDB(a.cfg, l)
 	if err != nil {
 		a.log.Err(err, "数据库初始化失败")
 		return
@@ -115,7 +115,7 @@ func (a *App) StartSession(devToolsURL string) SessionResult {
 	sid, err := a.service.StartSession(cfg)
 	if err != nil {
 		a.log.Err(err, "启动会话失败")
-		return SessionResult{Success: false, Error: err.Error()}
+		return SessionResult{Success: false, Error: fmt.Sprintf("启动会话失败: %v", err)}
 	}
 
 	a.currentSession = sid
@@ -177,6 +177,7 @@ func (a *App) AttachTarget(sessionID, targetID string) OperationResult {
 		a.log.Err(err, "附加目标失败", "sessionID", sessionID, "targetID", targetID)
 		return OperationResult{Success: false, Error: err.Error()}
 	}
+
 	a.log.Debug("已附加目标", "targetID", targetID)
 	return OperationResult{Success: true}
 }
@@ -188,6 +189,7 @@ func (a *App) DetachTarget(sessionID, targetID string) OperationResult {
 		a.log.Err(err, "移除目标失败", "sessionID", sessionID, "targetID", targetID)
 		return OperationResult{Success: false, Error: err.Error()}
 	}
+
 	a.log.Debug("已移除目标", "targetID", targetID)
 	return OperationResult{Success: true}
 }
@@ -200,7 +202,7 @@ func (a *App) SetDirty(dirty bool) {
 // BeforeClose 在窗口关闭前调用，如果有未保存更改则弹出确认框
 func (a *App) BeforeClose(ctx context.Context) bool {
 	if !a.isDirty {
-		return false // 允许关闭
+		return false
 	}
 
 	result, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
@@ -213,12 +215,12 @@ func (a *App) BeforeClose(ctx context.Context) bool {
 
 	if err != nil {
 		a.log.Warn("关闭确认对话框出错", "error", err)
-		// 出错时为安全起见，阻止关闭
 		return true
 	}
 
 	// 用户选"是"(要退出) -> 允许关闭(返回false)
 	// 用户选"否"(不退出) -> 阻止关闭(返回true)
+	a.log.Debug("用户选择", "result", result)
 	return result == "否"
 }
 
@@ -271,6 +273,7 @@ func (a *App) EnableInterception(sessionID string) OperationResult {
 		a.log.Err(err, "启用拦截失败", "sessionID", sessionID)
 		return OperationResult{Success: false, Error: err.Error()}
 	}
+
 	a.log.Info("已启用拦截", "sessionID", sessionID)
 	return OperationResult{Success: true}
 }
@@ -445,6 +448,7 @@ func (a *App) SetMultipleSettings(settingsJSON string) OperationResult {
 		a.log.Err(err, "批量设置失败")
 		return OperationResult{Success: false, Error: err.Error()}
 	}
+
 	return OperationResult{Success: true}
 }
 
@@ -672,6 +676,7 @@ func (a *App) QueryMatchedEventHistory(sessionID, finalResult, url, method strin
 		a.log.Err(err, "查询事件历史失败")
 		return MatchedEventHistoryResult{Success: false, Error: err.Error()}
 	}
+
 	return MatchedEventHistoryResult{Events: events, Total: total, Success: true}
 }
 

@@ -1,4 +1,3 @@
-// Package cdp 实现 CDP 协议的行为执行
 package cdp
 
 import (
@@ -36,8 +35,7 @@ type RequestMutation struct {
 	Cookies       map[string]string
 	RemoveCookies []string
 	Body          *string
-	// 终结性行为
-	Block *BlockResponse
+	Block         *BlockResponse // 终结性行为
 }
 
 // BlockResponse 拦截响应
@@ -307,6 +305,7 @@ func (e *ActionExecutor) ApplyResponseMutation(ctx context.Context, ts *targetSe
 	if mut.StatusCode != nil {
 		args.ResponseCode = mut.StatusCode
 	}
+
 	headers := e.buildFinalResponseHeaders(ev, mut)
 	if len(headers) > 0 {
 		args.ResponseHeaders = headers
@@ -360,8 +359,6 @@ func (e *ActionExecutor) FetchResponseBody(ctx context.Context, ts *targetSessio
 	}
 	return rb.Body, true
 }
-
-// ==================== 辅助函数 ====================
 
 // getRequestBody 获取请求体
 func (e *ActionExecutor) getRequestBody(ev *fetch.RequestPausedReply) string {
@@ -650,6 +647,7 @@ func removeURLEncodedField(body, name string) string {
 func getContentType(ev *fetch.RequestPausedReply) string {
 	var headers map[string]string
 	_ = json.Unmarshal(ev.Request.Headers, &headers)
+
 	for k, v := range headers {
 		if strings.EqualFold(k, "content-type") {
 			return v

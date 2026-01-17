@@ -275,14 +275,13 @@ function getNamePlaceholder(type: ActionType): string {
   }
 }
 
-// ==================== Key-Value 编辑器 ====================
-
 interface KeyValueEditorProps {
   title: string
   data: Record<string, string>
   onChange: (data: Record<string, string>) => void
 }
 
+// Key-Value 编辑器
 function KeyValueEditor({ title, data, onChange }: KeyValueEditorProps) {
   const entries = Object.entries(data)
 
@@ -346,13 +345,12 @@ function KeyValueEditor({ title, data, onChange }: KeyValueEditorProps) {
   )
 }
 
-// ==================== JSON Patch 编辑器 ====================
-
 interface JSONPatchEditorProps {
   patches: JSONPatchOp[]
   onChange: (patches: JSONPatchOp[]) => void
 }
 
+// JSON Patch 编辑器
 function JSONPatchEditor({ patches, onChange }: JSONPatchEditorProps) {
   const opOptions = [
     { value: 'add', label: '添加' },
@@ -437,14 +435,13 @@ function JSONPatchEditor({ patches, onChange }: JSONPatchEditorProps) {
   )
 }
 
-// ==================== Actions 列表编辑器 ====================
-
 interface ActionsEditorProps {
   actions: Action[]
   onChange: (actions: Action[]) => void
   stage: Stage
 }
 
+// 行为列表编辑器
 export function ActionsEditor({ actions, onChange, stage }: ActionsEditorProps) {
   const addAction = () => {
     const defaultType = stage === 'request' ? 'setHeader' : 'setHeader'

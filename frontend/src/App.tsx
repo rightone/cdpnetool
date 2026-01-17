@@ -69,7 +69,6 @@ declare global {
           LaunchBrowser: (headless: boolean) => Promise<{ devToolsUrl: string; success: boolean; error?: string }>
           CloseBrowser: () => Promise<{ success: boolean; error?: string }>
           GetBrowserStatus: () => Promise<{ devToolsUrl: string; success: boolean; error?: string }>
-          // 配置持久化 API
           ListConfigs: () => Promise<{ configs: ConfigRecord[]; success: boolean; error?: string }>
           GetConfig: (id: number) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
           SaveConfig: (id: number, configJson: string) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
@@ -80,7 +79,6 @@ declare global {
           SetDirty: (dirty: boolean) => Promise<void>
           ExportConfig: (name: string, json: string) => Promise<OperationResult>
           ImportConfig: (json: string) => Promise<{ config: ConfigRecord; success: boolean; error?: string }>
-          // 创建新配置/规则 API
           CreateNewConfig: (name: string) => Promise<{ config: ConfigRecord; configJson: string; success: boolean; error?: string }>
           GenerateNewRule: (name: string, existingCount: number) => Promise<{ ruleJson: string; success: boolean; error?: string }>
         }
@@ -366,6 +364,7 @@ function App() {
             </TabsList>
           </div>
 
+          {/* 目标面板 */}
           <TabsContent value="targets" className="flex-1 overflow-hidden m-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
             <div className="h-full overflow-auto p-4">
               <TargetsPanel 
@@ -377,6 +376,7 @@ function App() {
             </div>
           </TabsContent>
 
+          {/* 规则面板 */}
           <TabsContent value="rules" className="flex-1 overflow-hidden m-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
             <RulesPanel 
               sessionId={currentSessionId}
@@ -386,6 +386,7 @@ function App() {
             />
           </TabsContent>
 
+          {/* 事件面板 */}
           <TabsContent value="events" className="flex-1 overflow-hidden m-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
             <div className="h-full overflow-auto p-4">
               <EventsPanel 
@@ -477,8 +478,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
   const [ruleSet, setRuleSet] = useState<Config>(createEmptyConfig())
   const [showJson, setShowJson] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  // 配置管理状态
   const [ruleSets, setRuleSets] = useState<ConfigRecord[]>([])
   const [currentRuleSetId, setCurrentRuleSetId] = useState<number>(0)
   const [currentRuleSetName, setCurrentRuleSetName] = useState<string>('默认配置')
@@ -491,7 +490,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
   const [configInfoExpanded, setConfigInfoExpanded] = useState(false) // 配置信息栏展开状态
   const [jsonEditorContent, setJsonEditorContent] = useState('') // JSON 编辑器内容
   const [jsonError, setJsonError] = useState<string | null>(null) // JSON 解析错误
-  // 确认对话框（支持三选项：取消/不保存/保存）
   const [confirmDialog, setConfirmDialog] = useState<{
     show: boolean
     title: string
@@ -525,8 +523,7 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
       const result = await window.go.gui.App.ListConfigs()
       if (result?.success) {
         setRuleSets(result.configs || [])
-        // 加载第一个配置到编辑器，但不自动设置为激活状态
-        // 用户需要手动启用配置
+        // 加载第一个配置到编辑器，但不自动设置为激活状态，用户需要手动启用配置
         if (result.configs && result.configs.length > 0) {
           loadRuleSetData(result.configs[0])
         } else {
@@ -778,8 +775,6 @@ function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }
       return 0
     }
   }
-
-  // 右键菜单 - 已移除
 
   // 添加新规则（调用后端生成 ID）
   const handleAddRule = async () => {

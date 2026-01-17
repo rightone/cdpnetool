@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -68,14 +69,16 @@ func (s *svc) StartSession(cfg model.SessionConfig) (model.SessionID, error) {
 	// 验证连接是否有效：尝试获取目标列表
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
 	_, err := ses.mgr.ListTargets(ctx)
 	if err != nil {
 		s.log.Err(err, "连接 DevTools 失败", "devtools", cfg.DevToolsURL)
-		return "", errors.New("无法连接到 DevTools: " + err.Error())
+		return "", fmt.Errorf("无法连接到 DevTools: %w", err)
 	}
 
 	s.sessions[id] = ses
-	s.log.Info("创建会话成功", "session", string(id), "devtools", cfg.DevToolsURL, "concurrency", cfg.Concurrency, "pending", cfg.PendingCapacity)
+	s.log.Info("创建会话成功", "session", string(id), "devtools", cfg.DevToolsURL,
+		"concurrency", cfg.Concurrency, "pending", cfg.PendingCapacity)
 	return id, nil
 }
 
@@ -107,18 +110,21 @@ func (s *svc) AttachTarget(id model.SessionID, target model.TargetID) error {
 	if !ok {
 		return errors.New("cdpnetool: session not found")
 	}
+
 	if ses.mgr == nil {
 		ses.mgr = cdp.New(ses.cfg.DevToolsURL, ses.events, s.log)
 		ses.mgr.SetConcurrency(ses.cfg.Concurrency)
 		ses.mgr.SetRuntime(ses.cfg.BodySizeThreshold, ses.cfg.ProcessTimeoutMS)
 	}
+
 	err := ses.mgr.AttachTarget(target)
-	if err == nil {
-		s.log.Info("附加浏览器目标成功", "session", string(id), "target", string(target))
-	} else {
+	if err != nil {
 		s.log.Err(err, "附加浏览器目标失败", "session", string(id))
+		return err
 	}
-	return err
+
+	s.log.Info("附加浏览器目标成功", "session", string(id), "target", string(target))
+	return nil
 }
 
 // DetachTarget 为指定会话断开目标连接

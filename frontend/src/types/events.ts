@@ -1,6 +1,6 @@
 // 拦截事件相关类型
 
-// ========== 请求信息 ==========
+// 请求信息
 export interface RequestInfo {
   url: string
   method: string
@@ -9,7 +9,7 @@ export interface RequestInfo {
   resourceType?: string  // document/xhr/script/image等
 }
 
-// ========== 响应信息 ==========
+// 响应信息
 export interface ResponseInfo {
   statusCode: number
   headers: Record<string, string>
@@ -19,66 +19,64 @@ export interface ResponseInfo {
     endTime: number    // 结束时间
   }
 }
-// ========== 规则匹配信息 ==========
+
+// 规则匹配信息
 export interface RuleMatch {
   ruleId: string
   ruleName: string
   actions: string[]  // 执行的 action 类型列表
 }
 
-// ========== 网络事件（通用结构）==========
+// 网络事件（通用结构）
 export interface NetworkEvent {
   session: string
   target: string
   timestamp: number
   isMatched: boolean
-
-  // 请求信息
   request: RequestInfo
-
-  // 响应信息（可能为空，例如被阻断的请求）
   response?: ResponseInfo
-
-  // 匹配信息（仅匹配请求有）
   finalResult?: 'blocked' | 'modified' | 'passed'
   matchedRules?: RuleMatch[]
 }
 
-// ========== 匹配的事件（会存入数据库）==========
+// 匹配的事件（会存入数据库）
 export interface MatchedEvent {
   networkEvent: NetworkEvent
 }
 
-// ========== 未匹配的事件（仅内存，不存数据库）==========
+// 未匹配的事件（仅内存，不存数据库）
 export interface UnmatchedEvent {
   networkEvent: NetworkEvent
 }
 
-// ========== 统一事件接口（用于通道传输）==========
+// 统一事件接口（用于通道传输）
 export interface InterceptEvent {
   isMatched: boolean
   matched?: MatchedEvent
   unmatched?: UnmatchedEvent
 }
 
-// ========== 前端扩展类型（添加本地 ID 用于 React key）==========
+// 前端扩展类型（添加本地 ID 用于 React key）
 export interface MatchedEventWithId extends MatchedEvent {
   id: string
 }
 
+// 未匹配的事件（仅内存，不存数据库）
 export interface UnmatchedEventWithId extends UnmatchedEvent {
   id: string
 }
 
-// ========== 结果类型标签和颜色 ==========
+// 结果类型标签和颜色
 export type FinalResultType = 'blocked' | 'modified' | 'passed'
 
+// 结果类型标签
 export const FINAL_RESULT_LABELS: Record<FinalResultType, string> = {
   blocked: '阻断',
   modified: '修改',
   passed: '放行',
 }
 
+// 结果类型颜色
 export const FINAL_RESULT_COLORS: Record<FinalResultType, { bg: string; text: string }> = {
   blocked: { bg: 'bg-red-500/20', text: 'text-red-500' },
   modified: { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
