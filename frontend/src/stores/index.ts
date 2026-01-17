@@ -21,6 +21,7 @@ interface SessionState {
   devToolsURL: string
   isConnected: boolean
   isIntercepting: boolean
+  activeConfigId: number | null
   targets: TargetInfo[]
   attachedTargets: Set<string>
   matchedEvents: MatchedEventWithId[]    // 匹配的事件（会存入数据库）
@@ -31,6 +32,7 @@ interface SessionState {
   setCurrentSession: (id: string | null) => void
   setConnected: (connected: boolean) => void
   setIntercepting: (intercepting: boolean) => void
+  setActiveConfigId: (id: number | null) => void
   setTargets: (targets: TargetInfo[]) => void
   toggleAttachedTarget: (targetId: string) => void
   
@@ -51,6 +53,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   devToolsURL: 'http://localhost:9222',
   isConnected: false,
   isIntercepting: false,
+  activeConfigId: null,
   targets: [],
   attachedTargets: new Set(),
   matchedEvents: [],
@@ -60,6 +63,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   setCurrentSession: (id) => set({ currentSessionId: id }),
   setConnected: (connected) => set({ isConnected: connected }),
   setIntercepting: (intercepting) => set({ isIntercepting: intercepting }),
+  setActiveConfigId: (id) => set({ activeConfigId: id }),
   setTargets: (targets) => set({ targets }),
   toggleAttachedTarget: (targetId) => set((state) => {
     const newSet = new Set(state.attachedTargets)

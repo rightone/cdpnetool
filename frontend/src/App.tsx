@@ -485,13 +485,13 @@ interface RulesPanelProps {
 
 function RulesPanel({ sessionId, isConnected, attachedTargets, setIntercepting }: RulesPanelProps) {
   const { toast } = useToast()
+  const { activeConfigId, setActiveConfigId } = useSessionStore()
   const [ruleSet, setRuleSet] = useState<Config>(createEmptyConfig())
   const [showJson, setShowJson] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [ruleSets, setRuleSets] = useState<ConfigRecord[]>([])
   const [currentRuleSetId, setCurrentRuleSetId] = useState<number>(0)
   const [currentRuleSetName, setCurrentRuleSetName] = useState<string>('默认配置')
-  const [activeConfigId, setActiveConfigId] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [editingName, setEditingName] = useState<number | null>(null)
   const [newName, setNewName] = useState('')
