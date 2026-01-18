@@ -25,7 +25,7 @@
 
 #### macOS 和 Linux 用户
 
-> ⚠️ **注意**：目前官方仅提供 Windows 安装包，macOS 和 Linux 平台理论上支持但未经完整测试。如果您在这些平台上运行遇到问题，欢迎通过 [Issues](https://github.com/xxx/cdpnetool/issues) 反馈。
+> ⚠️ **注意**：目前官方仅提供 Windows 安装包，macOS 和 Linux 平台理论上支持但未经完整测试。如果您在这些平台上运行遇到问题，欢迎通过 [Issues](https://github.com/241x/cdpnetool/issues) 反馈。
 
 由于暂未提供预编译版本，请参考下方「从源码构建」方式。
 
