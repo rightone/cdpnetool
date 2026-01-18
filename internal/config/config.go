@@ -21,7 +21,7 @@ func NewConfig() *Config {
 			Db     string `yaml:"db"`
 			Prefix string `yaml:"prefix"`
 		}{
-			Db:     "data.db",
+			Db:     "data.db1",
 			Prefix: "cdpnetool_",
 		},
 		Log: struct {
