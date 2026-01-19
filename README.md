@@ -89,10 +89,6 @@ wails build
 
 欢迎提交 Issue 和 Pull Request！
 
-## 致谢
-
-本项目的大部分开发工作由 [Qoder](https://qoder.com/) AI 编程助手完成。Qoder 在架构设计、代码实现、功能优化和文档编写等方面提供了强大的支持，极大地提升了开发效率。
-
 ## 许可证
 
 [GPL-3.0 License](LICENSE)
