@@ -1,8 +1,8 @@
-name: Build Wails App on Release
+name: Build and Publish cdpnetool
 
 on:
   release:
-    types: [published]  # 推荐：仅在正式发布时构建
+    types: [published]  # 仅在正式发布 Release 时触发
 
 jobs:
   build:
@@ -38,21 +38,36 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Build Wails App (Unix-like)
+      # =============== 安装 Linux 构建依赖（关键！） ===============
+      - name: Install system dependencies (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            gcc \
+            pkg-config
+
+      # =============== 构建 Wails 应用 ===============
+      - name: Build cdpnetool (Unix-like)
         if: runner.os != 'Windows'
         run: wails build
 
-      - name: Build Wails App (Windows)
+      - name: Build cdpnetool (Windows)
         if: runner.os == 'Windows'
         run: wails build
         shell: bash
 
+      # =============== 上传构建产物 ===============
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.os }}
           path: dist/
+          retention-days: 3
 
+  # =============== 汇总并发布到 GitHub Release ===============
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -65,19 +80,20 @@ jobs:
         with:
           path: builds
 
-      - name: Flatten and rename assets (optional but clean)
+      - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          # Linux
-          cp builds/ubuntu-latest/dist/* release-assets/myapp-linux-amd64
-          # macOS
-          cp -r builds/macos-latest/dist/*.app release-assets/
-          mv release-assets/*.app release-assets/myapp-macos-arm64.app
-          # Windows
-          cp builds/windows-latest/dist/*.exe release-assets/myapp-windows-amd64.exe
 
-      - name: Generate checksums
-        run: |
+          # Linux (amd64)
+          cp builds/ubuntu-latest/dist/cdpnetool release-assets/cdpnetool-linux-amd64
+
+          # macOS (rename .app for clarity)
+          find builds/macos-latest/dist -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
+
+          # Windows
+          cp builds/windows-latest/dist/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
+
+          # Generate checksums
           cd release-assets
           sha256sum * > checksums.txt
 
@@ -85,6 +101,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/*
+            release-assets/cdpnetool-linux-amd64
+            release-assets/cdpnetool-macos-arm64.app
+            release-assets/cdpnetool-windows-amd64.exe
+            release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
