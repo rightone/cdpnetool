@@ -136,7 +136,7 @@ jobs:
           cp builds/bin-ubuntu-latest/cdpnetool release-assets/cdpnetool-linux-amd64
 
           # macOS Inter
-          cp builds/bin-macos-latest/cdpnetool-macos-intel.dmg release-assets/cdpnetool-macos-intel.dmg
+          cp builds/bin-macos-intel/cdpnetool-macos-intel.dmg release-assets/cdpnetool-macos-intel.dmg
 
           # macOS Apple-Silicon
           cp builds/bin-macos-arm64/cdpnetool-macos-apple-silicon.dmg release-assets/cdpnetool-macos-apple-silicon.dmg
