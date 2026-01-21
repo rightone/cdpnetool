@@ -56,9 +56,9 @@ jobs:
         run: wails build
 
       # =============== 调试：确认 build/bin/ 存在 ===============
-      - name: Debug: List build/bin/
+      - name: List build
         run: |
-          ls -la build/bin/
+          ls -la build
 
       # =============== 上传 artifact ===============
       - name: Upload build artifact
