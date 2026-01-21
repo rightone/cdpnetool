@@ -48,6 +48,9 @@ jobs:
             libwebkit2gtk-4.1-dev \
             gcc \
             pkg-config
+          # Create symlink to make webkit2gtk-4.0 visible to pkg-config
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc \
+               /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
 
       # =============== 构建 Wails 应用 ===============
       - name: Build cdpnetool (Unix-like)
