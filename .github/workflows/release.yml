@@ -60,14 +60,41 @@ jobs:
         if: runner.os == 'Linux'  || runner.os == 'macOS'
         run: |
           ls -la build/bin
+      # =============== macOS: 打包为 .dmg ===============
+      - name: Create DMG (macOS only)
+        if: runner.os == 'macOS'
+        run: |
+          # 安装 create-dmg
+          brew install create-dmg
 
-      # =============== 上传 artifact ===============
-      - name: Upload build artifact
+          # 生成 .dmg
+          create-dmg \
+            --volname "cdpnetool" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "cdpnetool.app" 175 120 \
+            --hide-extension "cdpnetool.app" \
+            --app-drop-link 425 120 \
+            "cdpnetool-macos-intel.dmg" \
+            "bin/cdpnetool.app"
+
+      # =============== 上传产物 ===============
+      - name: Upload artifact (Linux/Windows)
+        if: runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.os }}
-          path: build/bin/   # ←←← 关键：改为 build/bin/
-          retention-days: 3
+          path: bin/
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-macos-latest
+          path: |
+            bin/cdpnetool.app
+            cdpnetool-macos-intel.dmg    
 
   publish:
     needs: build
@@ -89,7 +116,7 @@ jobs:
           cp builds/bin-ubuntu-latest/cdpnetool release-assets/cdpnetool-linux-amd64
 
           # macOS
-          find builds/bin-macos-latest -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
+          cp builds/bin-macos-latest/cdpnetool-macos-intel.dmg release-assets/cdpnetool-macos-intel.dmg
 
           # Windows
           cp builds/bin-windows-latest/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
@@ -103,7 +130,7 @@ jobs:
         with:
           files: |
             release-assets/cdpnetool-linux-amd64
-            release-assets/cdpnetool-macos-arm64.app
+            release-assets/cdpnetool-macos-intel.dmg
             release-assets/cdpnetool-windows-amd64.exe
             release-assets/checksums.txt
         env:
