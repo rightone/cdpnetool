@@ -57,8 +57,9 @@ jobs:
 
       # =============== 调试：确认 build/bin/ 存在 ===============
       - name: List build
+        if: runner.os == 'Linux'
         run: |
-          ls -la build
+          ls -la build/bin
 
       # =============== 上传 artifact ===============
       - name: Upload build artifact
