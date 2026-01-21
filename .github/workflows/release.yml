@@ -2,7 +2,7 @@ name: Build and Publish cdpnetool
 
 on:
   release:
-    types: [published]  # 仅在正式发布 Release 时触发
+    types: [published]
 
 jobs:
   build:
@@ -33,12 +33,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      # =============== 安装 Linux 构建依赖（关键！） ===============
+      # =============== Linux 依赖（含符号链接） ===============
       - name: Install system dependencies (Linux only)
         if: runner.os == 'Linux'
         run: |
@@ -48,29 +48,26 @@ jobs:
             libwebkit2gtk-4.1-dev \
             gcc \
             pkg-config
-          # Create symlink to make webkit2gtk-4.0 visible to pkg-config
           sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc \
-               /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
+                     /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
 
-      # =============== 构建 Wails 应用 ===============
-      - name: Build cdpnetool (Unix-like)
-        if: runner.os != 'Windows'
+      # =============== 构建 ===============
+      - name: Build cdpnetool
         run: wails build
 
-      - name: Build cdpnetool (Windows)
-        if: runner.os == 'Windows'
-        run: wails build
-        shell: bash
+      # =============== 调试：确认 build/bin/ 存在 ===============
+      - name: Debug: List build/bin/
+        run: |
+          ls -la build/bin/
 
-      # =============== 上传构建产物 ===============
+      # =============== 上传 artifact ===============
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.os }}
-          path: dist/
+          name: bin-${{ matrix.os }}
+          path: build/bin/   # ←←← 关键：改为 build/bin/
           retention-days: 3
 
-  # =============== 汇总并发布到 GitHub Release ===============
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -87,16 +84,16 @@ jobs:
         run: |
           mkdir -p release-assets
 
-          # Linux (amd64)
-          cp builds/ubuntu-latest/dist/cdpnetool release-assets/cdpnetool-linux-amd64
+          # Linux
+          cp builds/ubuntu-latest/bin/cdpnetool release-assets/cdpnetool-linux-amd64
 
-          # macOS (rename .app for clarity)
-          find builds/macos-latest/dist -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
+          # macOS
+          find builds/macos-latest/bin -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
 
           # Windows
-          cp builds/windows-latest/dist/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
+          cp builds/windows-latest/bin/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
 
-          # Generate checksums
+          # Checksums
           cd release-assets
           sha256sum * > checksums.txt
 
