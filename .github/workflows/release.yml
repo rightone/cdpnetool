@@ -96,7 +96,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.os }}
-          path: bin/
+          path: build/bin/
 
       - name: Upload artifact (macOS - Intel)
         if: matrix.os == 'macos-15-intel'
