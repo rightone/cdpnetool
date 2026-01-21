@@ -86,14 +86,14 @@ jobs:
           mkdir -p release-assets
 
           # Linux
-          cp builds/ubuntu-latest/bin/cdpnetool release-assets/cdpnetool-linux-amd64
+          cp builds/bin-ubuntu-latest/cdpnetool release-assets/cdpnetool-linux-amd64
 
           # macOS
-          find builds/macos-latest/bin -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
+          find builds/bin-macos-latest -name "cdpnetool.app" -exec cp -r {} release-assets/cdpnetool-macos-arm64.app \;
 
           # Windows
-          cp builds/windows-latest/bin/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
-
+          cp builds/bin-windows-latest/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
+          
           # Checksums
           cd release-assets
           sha256sum * > checksums.txt
