@@ -60,14 +60,25 @@ jobs:
         if: runner.os == 'Linux'  || runner.os == 'macOS'
         run: |
           ls -la build/bin
+          
       # =============== macOS: 打包为 .dmg ===============
       - name: Create DMG (macOS only)
         if: runner.os == 'macOS'
         run: |
-          # 安装 create-dmg
-          brew install create-dmg
+          # 检测架构
+          ARCH=$(uname -m)
+          if [[ "$ARCH" == "arm64" ]]; then
+            DMG_NAME="cdpnetool-macos-apple-silicon.dmg"
+          elif [[ "$ARCH" == "x86_64" ]]; then
+            DMG_NAME="cdpnetool-macos-intel.dmg"
+          else
+            echo "❌ Unknown architecture: $ARCH"
+            exit 1
+          fi
 
-          # 生成 .dmg
+          echo "📦 Creating DMG: $DMG_NAME"
+
+          brew install create-dmg
           create-dmg \
             --volname "cdpnetool" \
             --window-pos 200 120 \
@@ -76,7 +87,7 @@ jobs:
             --icon "cdpnetool.app" 175 120 \
             --hide-extension "cdpnetool.app" \
             --app-drop-link 425 120 \
-            "cdpnetool-macos-intel.dmg" \
+            "$DMG_NAME" \
             "build/bin/cdpnetool.app"
 
       # =============== 上传产物 ===============
@@ -87,14 +98,23 @@ jobs:
           name: bin-${{ matrix.os }}
           path: bin/
 
-      - name: Upload artifact (macOS)
-        if: runner.os == 'macOS'
+      - name: Upload artifact (macOS - Intel)
+        if: matrix.os == 'macos-15-intel'
         uses: actions/upload-artifact@v4
         with:
-          name: bin-macos-latest
+          name: bin-macos-intel
           path: |
-            bin/cdpnetool.app
-            cdpnetool-macos-intel.dmg    
+            build/bin/cdpnetool.app
+            cdpnetool-macos-intel.dmg
+
+      - name: Upload artifact (macOS - ARM64)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-macos-arm64
+          path: |
+            build/bin/cdpnetool.app
+            cdpnetool-macos-apple-silicon.dmg    
 
   publish:
     needs: build
@@ -115,9 +135,12 @@ jobs:
           # Linux
           cp builds/bin-ubuntu-latest/cdpnetool release-assets/cdpnetool-linux-amd64
 
-          # macOS
+          # macOS Inter
           cp builds/bin-macos-latest/cdpnetool-macos-intel.dmg release-assets/cdpnetool-macos-intel.dmg
 
+          # macOS Apple-Silicon
+          cp builds/bin-macos-arm64/cdpnetool-macos-apple-silicon.dmg release-assets/cdpnetool-macos-apple-silicon.dmg
+          
           # Windows
           cp builds/bin-windows-latest/cdpnetool.exe release-assets/cdpnetool-windows-amd64.exe
           
@@ -131,6 +154,7 @@ jobs:
           files: |
             release-assets/cdpnetool-linux-amd64
             release-assets/cdpnetool-macos-intel.dmg
+            release-assets/cdpnetool-macos-apple-silicon.dmg
             release-assets/cdpnetool-windows-amd64.exe
             release-assets/checksums.txt
         env:
